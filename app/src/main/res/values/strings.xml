@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">レコードウィジェット</string>
+    <string name="widget_description">タップで好きな音声を再生</string>
+    <string name="widget_empty_hint">タップして音声を追加</string>
+    <string name="widget_preview_title">お気に入りの音声</string>
+    <string name="cd_disc_stopped">レコード。タップで再生</string>
+    <string name="cd_disc_playing">レコード。タップで一時停止</string>
+    <string name="cd_disc_empty">レコード。タップしてアプリを開き音声を追加</string>
+    <string name="cd_next">次の曲</string>
+    <string name="channel_name">再生</string>
+    <string name="notification_preparing">準備中…</string>
+    <string name="add_from_video">動画から追加</string>
+    <string name="hint_widget">ホーム画面を長押し →「ウィジェット」→「レコードウィジェット」を置くと、タップで再生できます</string>
+    <string name="empty_list">まだ音声がありません。動画を追加してください</string>
+    <string name="extracting">取り出し中…</string>
+    <string name="added">追加しました</string>
+    <string name="no_audio">この動画には音声がありません</string>
+    <string name="unsupported_format">この音声形式（%1$s）には対応していません</string>
+    <string name="extract_failed">取り出しに失敗しました: %1$s</string>
+    <string name="move_up">上へ</string>
+    <string name="move_down">下へ</string>
+    <string name="delete">削除</string>
+    <string name="rename_title">名前を変更</string>
+    <string name="delete_confirm">「%1$s」を削除しますか？</string>
+    <string name="ok">OK</string>
+    <string name="cancel">キャンセル</string>
+    <string name="storage_error">保存に失敗しました: %1$s</string>
+    <string name="default_track_title">音声 %1$d</string>
+</resources>
