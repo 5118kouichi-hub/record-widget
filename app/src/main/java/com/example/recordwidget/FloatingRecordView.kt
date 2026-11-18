@@ -34,6 +34,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
 
     interface Listener {
         fun onTap()
+        fun onLongPress()
         fun onDragStart()
         fun onDrag(totalDxPx: Float, totalDyPx: Float)
         fun onDragEnd()
@@ -127,6 +128,14 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
     private var scratching = false
     private var seekable = false
 
+    private val longPress = Runnable {
+        if (mode == Mode.UNDECIDED_MOVE || mode == Mode.UNDECIDED_SCRATCH) {
+            mode = Mode.IGNORE // the rest of this touch does nothing
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            listener?.onLongPress()
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val cx = width / 2f
@@ -141,10 +150,12 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
                 mode = if (hypot(e.x - cx, e.y - cy) < radius * 0.4f) Mode.UNDECIDED_MOVE else Mode.UNDECIDED_SCRATCH
                 lastTouchAngle = touchAngle(e, cx, cy)
                 scratchTotal = 0f
+                postDelayed(longPress, LONG_PRESS_MS)
                 return true
             }
             // A second finger: ignore the rest of this gesture (angles would jump).
             MotionEvent.ACTION_POINTER_DOWN -> {
+                removeCallbacks(longPress)
                 endGesture(cancelled = true)
                 mode = Mode.IGNORE
                 return true
@@ -152,6 +163,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
             MotionEvent.ACTION_MOVE -> {
                 if (mode == Mode.IGNORE) return true
                 val moved = hypot(e.rawX - downRawX, e.rawY - downRawY) > slop
+                if (moved) removeCallbacks(longPress)
                 if (mode == Mode.UNDECIDED_MOVE && moved) {
                     mode = Mode.MOVE
                     listener?.onDragStart()
@@ -183,6 +195,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(longPress)
                 val tap = (mode == Mode.UNDECIDED_MOVE || mode == Mode.UNDECIDED_SCRATCH) &&
                     e.eventTime - downTime < TAP_MS
                 endGesture(cancelled = false)
@@ -191,6 +204,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(longPress)
                 endGesture(cancelled = true)
                 mode = Mode.UNDECIDED_MOVE
                 return true
@@ -289,5 +303,6 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
         private const val ACCEL_UP = FULL_SPEED / 1.2f
         private const val ACCEL_DOWN = FULL_SPEED / 1.5f
         private const val TAP_MS = 350L
+        private const val LONG_PRESS_MS = 450L
     }
 }

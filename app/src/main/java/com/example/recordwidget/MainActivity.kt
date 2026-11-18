@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         floatingSwitch.isChecked = FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this)
         syncingSwitch = false
         PlaybackService.floatingChanged(this)
+        refresh() // the order may have changed from the floating record's list
     }
 
     private fun onFloatingSwitch(on: Boolean) {

@@ -64,6 +64,18 @@ class TrackStore(private val root: File) {
         }
     }
 
+    /**
+     * Puts the tracks in the order of [ids]. Unknown ids are ignored; tracks not in [ids]
+     * (e.g. added after a saved order was made) keep their relative order at the end.
+     */
+    fun reorder(ids: List<String>) {
+        synchronized(LOCK) {
+            val list = load()
+            val sorted = ordered(list, ids)
+            if (sorted != list) save(sorted)
+        }
+    }
+
     fun move(from: Int, to: Int) {
         synchronized(LOCK) {
             val list = load()
@@ -104,6 +116,13 @@ class TrackStore(private val root: File) {
 
     internal companion object {
         private val LOCK = Any()
+
+        fun ordered(list: List<Track>, ids: List<String>): List<Track> {
+            val byId = list.associateBy { it.id }
+            val first = ids.distinct().mapNotNull { byId[it] }
+            val firstIds = first.mapTo(HashSet()) { it.id }
+            return first + list.filter { it.id !in firstIds }
+        }
 
         fun serialize(list: List<Track>): String {
             val sb = StringBuilder("[")

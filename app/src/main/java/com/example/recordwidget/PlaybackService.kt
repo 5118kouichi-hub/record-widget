@@ -43,6 +43,23 @@ class PlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private lateinit var floating: FloatingRecord
 
+    /** Track repeated on its own (REPEAT_MODE_ONE), chosen in the floating record's list. */
+    private var loopingId: String? = null
+
+    private fun clearLoop() {
+        loopingId = null
+        player.repeatMode = Player.REPEAT_MODE_ALL
+    }
+
+    /** Current item := track [id] from its start. False if it is not in the queue. */
+    private fun seekToTrack(id: String): Boolean {
+        val index = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == id }
+            ?: return false
+        if (index != player.currentMediaItemIndex) player.seekTo(index, 0L)
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        return true
+    }
+
     /** Errors in a row without reaching STATE_READY; bounds skip-on-error to one lap. */
     private var consecutiveErrors = 0
 
@@ -151,13 +168,47 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun previous() {
+            clearLoop()
             if (applyPendingReload()) skipBack()
         }
 
         override fun next() {
+            clearLoop()
             if (!applyPendingReload()) return
             player.seekToNextMediaItem()
             if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        }
+
+        override fun playTrack(id: String) {
+            if (!applyPendingReload()) return
+            if (loopingId != id) clearLoop()
+            if (!seekToTrack(id)) return
+            player.play()
+        }
+
+        override fun toggleLoop(id: String) {
+            if (!applyPendingReload()) return
+            if (loopingId == id) {
+                clearLoop()
+                return
+            }
+            if (!seekToTrack(id)) return
+            loopingId = id
+            player.repeatMode = Player.REPEAT_MODE_ONE
+            player.play()
+        }
+
+        override fun loopingId(): String? = loopingId
+
+        override fun reorder(ids: List<String>) {
+            try {
+                TrackStore(filesDir).reorder(ids)
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "reorder failed", e)
+                return
+            }
+            if (player.mediaItemCount > 0) rebuildQueue()
+            RecordWidget.refresh(this@PlaybackService)
         }
 
         override fun onShownChanged(shown: Boolean) {
@@ -277,6 +328,7 @@ class PlaybackService : MediaSessionService() {
             finishEmpty(startId)
             return
         }
+        clearLoop()
         skipBack()
         player.play()
         floating.onStartedFromOutside()
@@ -296,6 +348,7 @@ class PlaybackService : MediaSessionService() {
             finishEmpty(startId)
             return
         }
+        clearLoop()
         player.seekToNextMediaItem() // wraps to the first item because of REPEAT_MODE_ALL
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
         player.play()
@@ -349,6 +402,7 @@ class PlaybackService : MediaSessionService() {
             player.addMediaItems(0, items.subList(0, newIndex))
             player.addMediaItems(items.subList(newIndex + 1, items.size))
         } else {
+            if (loopingId != null) clearLoop() // the repeated track was deleted
             // Same index = the following track; past the end (last one deleted) wraps to 0.
             player.setMediaItems(items, if (oldIndex >= items.size) 0 else oldIndex, 0L)
             if (player.playWhenReady && player.playbackState == Player.STATE_IDLE) player.prepare()

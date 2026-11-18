@@ -197,4 +197,13 @@ class TrackStoreTest {
         assertTrue(s.fileFor(t(1)).isFile)
         assertFalse(s.thumbFor("w").exists())
     }
+
+    @Test
+    fun reorderPutsGivenIdsFirstAndKeepsTheRest() {
+        val root = tmp.newFolder()
+        val s = TrackStore(root)
+        (1..4).forEach { s.add(t(it)) }
+        s.reorder(listOf(t(3).id, "missing", t(1).id, t(3).id))
+        assertEquals(listOf(t(3), t(1), t(2), t(4)), TrackStore(root).all())
+    }
 }

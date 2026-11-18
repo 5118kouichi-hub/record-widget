@@ -35,6 +35,10 @@ class FloatingRecord(
         fun togglePlay()
         fun previous()
         fun next()
+        fun playTrack(id: String)
+        fun toggleLoop(id: String)
+        fun loopingId(): String?
+        fun reorder(ids: List<String>)
         /** Shown/hidden: the service keeps itself in the foreground while the record is shown. */
         fun onShownChanged(shown: Boolean)
     }
@@ -50,12 +54,28 @@ class FloatingRecord(
     private var closeTarget: View? = null
     private var thumbId: String? = null
 
+    private val panel = TrackListPanel(
+        ctx,
+        object : TrackListPanel.Actions {
+            override fun currentId() = player.currentMediaItem?.mediaId
+            override fun loopingId() = actions.loopingId()
+            override fun playTrack(id: String) = actions.playTrack(id)
+            override fun toggleLoop(id: String) {
+                actions.toggleLoop(id)
+                refreshPanel()
+            }
+            override fun reorder(ids: List<String>) = actions.reorder(ids)
+        },
+    )
+
     /** Closed by dragging onto ×: stays away until playback is started again from outside. */
     private var dismissed = false
 
     /** Setting + permission, cached: re-read only on [refreshSettings] (no binder call per event). */
     private var allowed = readAllowed()
     private var releasing = false
+
+    private fun refreshPanel() = panel.refresh()
 
     private fun readAllowed() = isEnabled(ctx) && Settings.canDrawOverlays(ctx)
 
@@ -90,6 +110,7 @@ class FloatingRecord(
     fun sync() {
         val want = allowed && !dismissed && !releasing && player.mediaItemCount > 0
         if (want && root == null) show() else if (!want && root != null) hide()
+        panel.refresh()
         val rec = record ?: return
         rec.setPlaying(isTurning())
         val id = player.currentMediaItem?.mediaId
@@ -169,6 +190,7 @@ class FloatingRecord(
 
     private fun hide() {
         hideCloseTarget()
+        panel.hide()
         root?.let {
             try {
                 wm.removeView(it)
@@ -218,6 +240,8 @@ class FloatingRecord(
 
     private val recordListener = object : FloatingRecordView.Listener {
         override fun onTap() = actions.togglePlay()
+
+        override fun onLongPress() = panel.show()
 
         override fun onDragStart() {
             val lp = params ?: return
