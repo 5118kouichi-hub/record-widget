@@ -82,6 +82,18 @@ class MainActivity : AppCompatActivity() {
             },
         )
         screen.install()
+        // Back closes the fan menu first.
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (screen.closeFanIfOpen()) return
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            },
+        )
         updateBusy()
         screen.setUpdateStatus(
             getString(R.string.update_current, Updater.currentBuild(this)) + "\n" +

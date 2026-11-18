@@ -17,6 +17,7 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -57,6 +58,10 @@ class MainScreen(
         fun onPrevious()
         fun onNext()
     }
+
+    private lateinit var scroll: ScrollView
+    private lateinit var tracksCaption: View
+    private lateinit var settingsCaption: View
 
     private val density = activity.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).roundToInt()
@@ -116,7 +121,8 @@ class MainScreen(
         content.addView(volumeBar())
 
         // ---- sleeves ----
-        content.addView(caption(R.string.section_tracks))
+        tracksCaption = caption(R.string.section_tracks)
+        content.addView(tracksCaption)
         tracksGroup = card()
         content.addView(tracksGroup)
         content.addView(footer(R.string.hint_widget))
@@ -131,7 +137,8 @@ class MainScreen(
         }
         content.addView(progressText)
 
-        content.addView(caption(R.string.section_floating))
+        settingsCaption = caption(R.string.section_floating)
+        content.addView(settingsCaption)
         floatingSwitch = switch { on -> if (!syncing) callbacks.onFloatingSwitch(on) }
         content.addView(card(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)))
         content.addView(footer(R.string.floating_hint))
@@ -148,21 +155,59 @@ class MainScreen(
         )
         content.addView(updateStatus)
 
-        val scroll = ScrollView(activity).apply {
+        scroll = ScrollView(activity).apply {
             background = WoodDrawable(s.bg, s.bgGrain, density)
             isFillViewport = true
             clipToPadding = false
             addView(content)
         }
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
+
+        // FAB fan in the top-right corner (stays put while the page scrolls)
+        val fan = FanMenu(
+            activity,
+            s,
+            listOf(
+                FanMenu.Item(R.drawable.ic_video, R.string.fan_add_video) { callbacks.onAddVideo() },
+                FanMenu.Item(R.drawable.ic_link, R.string.fan_add_url) { callbacks.onAddUrl() },
+                FanMenu.Item(R.drawable.ic_list, R.string.fan_tracks) { scrollToView(tracksCaption) },
+                FanMenu.Item(R.drawable.ic_settings, R.string.fan_settings) { scrollToView(settingsCaption) },
+            ),
+        )
+        val root = FrameLayout(activity)
+        fan.host = root
+        root.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val fabLp = FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(16)
+            rightMargin = dp(16)
+        }
+        root.addView(fan.button, fabLp)
+        fanMenu = fan
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            scroll.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            fabLp.topMargin = bars.top + dp(16)
+            fabLp.rightMargin = bars.right + dp(16)
+            fan.button.layoutParams = fabLp
             insets
         }
-        activity.setContentView(scroll)
+        activity.setContentView(root)
     }
 
     // ---- state from MainActivity ---------------------------------------------------------
+
+    private var fanMenu: FanMenu? = null
+
+    /** Back key: close the fan first. */
+    fun closeFanIfOpen(): Boolean {
+        val f = fanMenu ?: return false
+        if (!f.isOpen) return false
+        f.close(null)
+        return true
+    }
+
+    private fun scrollToView(v: View) {
+        scroll.smoothScrollTo(0, (v.top - dp(8)).coerceAtLeast(0))
+    }
 
     fun setFloatingChecked(on: Boolean) {
         syncing = true
@@ -211,7 +256,7 @@ class MainScreen(
     private fun masthead(): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.BOTTOM
-        setPadding(dp(20), dp(12), dp(20), 0)
+        setPadding(dp(20), dp(12), dp(72), 0) // right: room for the fan button
         addView(
             onBgText(activity.getString(R.string.header_title), 26f, s.onBg).apply { typeface = s.serifBold },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),

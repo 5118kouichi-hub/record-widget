@@ -97,4 +97,10 @@
     <string name="update_notif_text">build-%1$d が出ました。タップしてダウンロードし、開いてインストールしてください</string>
     <string name="hero_hint">レコードをタップで再生／一時停止・キーで前の曲／次の曲</string>
     <string name="hero_hint_empty">下の「追加」から動画を選ぶと、ここで再生できます</string>
+    <string name="fan_add_video">動画を追加</string>
+    <string name="fan_add_url">URLを追加</string>
+    <string name="fan_tracks">曲の一覧</string>
+    <string name="fan_settings">設定</string>
+    <string name="cd_fan_open">メニューを開く</string>
+    <string name="cd_fan_close">メニューを閉じる</string>
 </resources>
