@@ -142,14 +142,15 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val cx = width / 2f
         val cy = height / 2f
-        val radius = min(width, height) / 2f
+        val radius = min(width, height) / 2f * RECORD_SCALE // the drawn record
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downRawX = e.rawX
                 downRawY = e.rawY
                 downTime = e.eventTime
-                // Inner 40% (the label) moves the bubble; the vinyl ring scratches.
-                mode = if (hypot(e.x - cx, e.y - cy) < radius * 0.4f) Mode.UNDECIDED_MOVE else Mode.UNDECIDED_SCRATCH
+                // Label and inner half of the black vinyl move the bubble; the outer vinyl
+                // and the margin around the record (beyond its edge) scratch.
+                mode = if (hypot(e.x - cx, e.y - cy) < radius * MOVE_ZONE) Mode.UNDECIDED_MOVE else Mode.UNDECIDED_SCRATCH
                 lastTouchAngle = touchAngle(e, cx, cy)
                 scratchTotal = 0f
                 postDelayed(longPress, LONG_PRESS_MS)
@@ -251,7 +252,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
     private fun discBounds(v: View, d: Drawable): Float {
         val cx = v.width / 2f
         val cy = v.height / 2f
-        val s = min(v.width, v.height) / 2f / 42f
+        val s = min(v.width, v.height) / 2f * RECORD_SCALE / 42f
         val left = (cx - 44f * s).toInt()
         val top = (cy - 56f * s).toInt()
         val size = (100f * s).toInt()
@@ -297,7 +298,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
             val t = text ?: return
             val cx = width / 2f
             val cy = height / 2f
-            val r = min(width, height) / 2f
+            val r = min(width, height) / 2f * RECORD_SCALE
             textPaint.textSize = r * 0.32f
             val w = textPaint.measureText(t) + r * 0.3f
             val h = textPaint.textSize * 1.5f
@@ -309,6 +310,12 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
 
     companion object {
         const val FULL_SPEED = 200f // deg/s = 33 1/3 rpm
+
+        /** The record is drawn smaller than the view: the margin is extra scratch area. */
+        const val RECORD_SCALE = 96f / 132f
+
+        /** Label radius is 1/3 of the record; halfway out on the black vinyl = 2/3. */
+        private const val MOVE_ZONE = 0.67f
         private const val ACCEL_UP = FULL_SPEED / 1.2f
         private const val ACCEL_DOWN = FULL_SPEED / 1.5f
         private const val TAP_MS = 350L

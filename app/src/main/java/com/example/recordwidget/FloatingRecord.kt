@@ -164,8 +164,8 @@ class FloatingRecord(
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            addView(view, LinearLayout.LayoutParams(dp(RECORD_DP), dp(RECORD_DP)))
-            addView(buttons, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
+            addView(view, LinearLayout.LayoutParams(dp(TOUCH_DP), dp(TOUCH_DP)))
+            addView(buttons, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = -dp(14) }) // tuck under the record, into the touch margin
         }
         val screen = ctx.resources.displayMetrics
         val lp = overlayParams(
@@ -173,7 +173,7 @@ class FloatingRecord(
             WindowManager.LayoutParams.WRAP_CONTENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = prefs.getInt(KEY_X, screen.widthPixels - dp(RECORD_DP + 12))
+            x = prefs.getInt(KEY_X, screen.widthPixels - dp(TOUCH_DP))
             y = prefs.getInt(KEY_Y, (screen.heightPixels * 0.3f).toInt())
         }
         clamp(lp)
@@ -318,8 +318,8 @@ class FloatingRecord(
     /** Keeps the whole record (and its buttons) on screen. */
     private fun clamp(lp: WindowManager.LayoutParams) {
         val m = ctx.resources.displayMetrics
-        val w = root?.width?.takeIf { it > 0 } ?: dp(RECORD_DP)
-        val h = root?.height?.takeIf { it > 0 } ?: dp(RECORD_DP + 36)
+        val w = root?.width?.takeIf { it > 0 } ?: dp(TOUCH_DP)
+        val h = root?.height?.takeIf { it > 0 } ?: dp(TOUCH_DP + 22)
         lp.x = lp.x.coerceIn(0, (m.widthPixels - w).coerceAtLeast(0))
         lp.y = lp.y.coerceIn(0, (m.heightPixels - h).coerceAtLeast(0))
     }
@@ -404,7 +404,8 @@ class FloatingRecord(
         private const val KEY_ENABLED = "enabled"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"
-        private const val RECORD_DP = 96
+        /** Touch area around the 96 dp record: scratching works a little beyond its edge. */
+        private const val TOUCH_DP = 132
         private const val CLOSE_DP = 64
         private const val MS_PER_TURN = 15_000f
 
