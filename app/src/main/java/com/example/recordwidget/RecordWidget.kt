@@ -32,6 +32,7 @@ object RecordWidget {
     private const val RC_TOGGLE = 1
     private const val RC_NEXT = 2
     private const val RC_OPEN_APP = 3
+    private const val RC_PREV = 5
 
     /**
      * How the record moves. The launcher animates it (see tools/gen_widget_res.py); this
@@ -251,6 +252,7 @@ object RecordWidget {
                 PendingIntent.getActivity(ctx, RC_OPEN_APP, mainActivityIntent(ctx), flags),
             )
             views.setViewVisibility(R.id.next, View.GONE)
+            views.setViewVisibility(R.id.prev, View.GONE)
         } else {
             views.setTextViewText(R.id.title, s.title ?: track?.title)
             views.setContentDescription(
@@ -259,7 +261,9 @@ object RecordWidget {
             )
             views.setOnClickPendingIntent(R.id.disc_area, servicePendingIntent(ctx, PlaybackService.ACTION_TOGGLE, RC_TOGGLE))
             views.setOnClickPendingIntent(R.id.next, servicePendingIntent(ctx, PlaybackService.ACTION_NEXT, RC_NEXT))
+            views.setOnClickPendingIntent(R.id.prev, servicePendingIntent(ctx, PlaybackService.ACTION_PREV, RC_PREV))
             views.setViewVisibility(R.id.next, View.VISIBLE)
+            views.setViewVisibility(R.id.prev, View.VISIBLE)
         }
         return views
     }

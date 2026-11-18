@@ -177,12 +177,60 @@ def layout(name, d):
             android:src="@drawable/tonearm_up" />
     </FrameLayout>
 
-    <include
-        layout="@layout/widget_title_row"
-        android:layout_width="{d}dp"
-        android:layout_height="wrap_content" />
+{title_row(d)}
 </LinearLayout>
 """
+
+
+def button(bid, icon, cd, size):
+    return f"""        <ImageButton
+            android:id="@+id/{bid}"
+            android:layout_width="{size}dp"
+            android:layout_height="{size}dp"
+            android:layout_marginHorizontal="3dp"
+            android:background="@drawable/next_bg"
+            android:contentDescription="@string/{cd}"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/{icon}" />"""
+
+
+def title_row(d):
+    # Small record: too narrow for a title -> just the two buttons (title kept but hidden
+    # so RecordWidget can set it on every size).
+    small = d < 100
+    size = 26 if small else 28
+    title_vis = 'android:visibility="gone"' if small else 'android:layout_marginHorizontal="4dp"'
+    return f"""    <!-- No background: text shadow and small dark circles keep it readable on any wallpaper. -->
+    <LinearLayout
+        android:layout_width="{d}dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+{button("prev", "ic_prev", "cd_prev", size)}
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            {title_vis}
+            android:ellipsize="end"
+            android:gravity="center_horizontal"
+            android:maxLines="1"
+            android:shadowColor="#E6000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:singleLine="true"
+            android:text="@string/widget_preview_title"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp" />
+
+{button("next", "ic_next", "cd_next", size)}
+    </LinearLayout>"""
 
 
 def ids_kotlin():

@@ -37,4 +37,10 @@
     <string name="url_unsupported_site">このサイトのリンクは再生できません（音声ファイルへの直接のリンクが必要です）</string>
     <string name="url_unreadable">このリンクは音声として読み込めませんでした</string>
     <string name="default_web_title">ネットの音声 %1$d</string>
+    <string name="cd_prev">前の曲</string>
+    <string name="cd_floating">浮かぶレコード。タップで再生・一時停止、盤を回すと早送り・巻き戻し</string>
+    <string name="cd_close_floating">ここに運ぶと閉じる</string>
+    <string name="floating_switch">浮かぶレコード（他のアプリの上に表示）</string>
+    <string name="floating_hint">再生中はどのアプリの上にもレコードが浮かびます。タップで再生／一時停止、盤をぐるっと回すと早送り（時計回り）・巻き戻し（反時計回り）、真ん中をつまんで移動、下の×まで運ぶと閉じます。</string>
+    <string name="floating_need_permission">次の画面で「レコードウィジェット」の「他のアプリの上に重ねて表示」をオンにしてください</string>
 </resources>

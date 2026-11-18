@@ -365,8 +365,52 @@
             android:src="@drawable/tonearm_up" />
     </FrameLayout>
 
-    <include
-        layout="@layout/widget_title_row"
+    <!-- No background: text shadow and small dark circles keep it readable on any wallpaper. -->
+    <LinearLayout
         android:layout_width="72dp"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/prev"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginHorizontal="3dp"
+            android:background="@drawable/next_bg"
+            android:contentDescription="@string/cd_prev"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_prev" />
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:visibility="gone"
+            android:ellipsize="end"
+            android:gravity="center_horizontal"
+            android:maxLines="1"
+            android:shadowColor="#E6000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:singleLine="true"
+            android:text="@string/widget_preview_title"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp" />
+
+        <ImageButton
+            android:id="@+id/next"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginHorizontal="3dp"
+            android:background="@drawable/next_bg"
+            android:contentDescription="@string/cd_next"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_next" />
+    </LinearLayout>
 </LinearLayout>

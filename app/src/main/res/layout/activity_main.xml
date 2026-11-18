@@ -32,6 +32,23 @@
         android:textColor="@color/shop_accent"
         android:visibility="gone" />
 
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/floatingSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:minHeight="48dp"
+        android:text="@string/floating_switch"
+        android:textColor="@color/shop_text" />
+
+    <TextView
+        android:id="@+id/floatingHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/floating_hint"
+        android:textColor="@color/shop_text_sub"
+        android:textSize="13sp" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

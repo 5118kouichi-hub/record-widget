@@ -41,6 +41,7 @@ class PlaybackService : MediaSessionService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var session: MediaSession
+    private lateinit var floating: FloatingRecord
 
     /** Errors in a row without reaching STATE_READY; bounds skip-on-error to one lap. */
     private var consecutiveErrors = 0
@@ -120,6 +121,7 @@ class PlaybackService : MediaSessionService() {
             .build()
         player.repeatMode = Player.REPEAT_MODE_ALL
         player.addListener(listener)
+        floating = FloatingRecord(this, player, floatingActions)
 
         session = MediaSession.Builder(this, player)
             .setSessionActivity(
@@ -135,6 +137,41 @@ class PlaybackService : MediaSessionService() {
         // onGetSession(); without addSession() Media3 would never post its media notification
         // (nor take over / drop the foreground state).
         addSession(session)
+    }
+
+    /** The floating record's buttons act on the player directly (the service is running). */
+    private val floatingActions = object : FloatingRecord.Actions {
+        override fun togglePlay() {
+            if (isActive()) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                player.play()
+            }
+        }
+
+        override fun previous() = skipBack()
+
+        override fun next() {
+            player.seekToNextMediaItem()
+            if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        }
+
+        override fun onShownChanged(shown: Boolean) {
+            // Shown: stay in the foreground even when paused, so the record does not vanish
+            // when Android reaps idle background services. Hidden: back to Media3's rule.
+            try {
+                onUpdateNotification(session, isActive() || shown)
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "foreground change refused", e)
+            }
+        }
+    }
+
+    /** Media3 decides foreground vs not from playback; the floating record also counts. */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        val keep = ::floating.isInitialized && floating.isShown
+        super.onUpdateNotification(session, startInForegroundRequired || keep)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
@@ -156,6 +193,12 @@ class PlaybackService : MediaSessionService() {
         ) {
             return super.onStartCommand(intent, flags, startId)
         }
+        if (action == ACTION_FLOATING) {
+            // Setting changed in the app (plain startService, like RELOAD).
+            floating.sync()
+            if (player.mediaItemCount == 0) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (action == ACTION_RELOAD) {
             // Only sent via plain startService (companion reload()), never foreground-required:
             // no placeholder (no flicker) and no stop/detach, which could resurrect a paused
@@ -170,6 +213,7 @@ class PlaybackService : MediaSessionService() {
         when (action) {
             ACTION_TOGGLE -> toggle(startId)
             ACTION_NEXT -> next(startId)
+            ACTION_PREV -> previous(startId)
             else -> {
                 Log.w(TAG, "ignoring unknown action $action")
                 if (player.mediaItemCount == 0) {
@@ -183,6 +227,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (floating.isShown) return // the floating record keeps the service (and its controls)
         if (!player.playWhenReady || player.mediaItemCount == 0) stopSelf()
     }
 
@@ -190,6 +235,7 @@ class PlaybackService : MediaSessionService() {
         isRunning = false
         if (player.mediaItemCount > 0) saveResume()
         player.removeListener(listener)
+        floating.release()
         player.release()
         session.release()
         // null title -> the widget shows the saved resume track's title.
@@ -209,7 +255,27 @@ class PlaybackService : MediaSessionService() {
         } else {
             if (player.playbackState == Player.STATE_IDLE) player.prepare()
             player.play()
+            floating.onStartedFromOutside()
         }
+    }
+
+    private fun previous(startId: Int) {
+        if (!applyPendingReload() || !ensureQueue()) {
+            finishEmpty(startId)
+            return
+        }
+        skipBack()
+        player.play()
+        floating.onStartedFromOutside()
+    }
+
+    /**
+     * "Previous" like every music player: more than 3 s into the track -> back to its start,
+     * otherwise the previous track (wraps to the last because of REPEAT_MODE_ALL).
+     */
+    private fun skipBack() {
+        player.seekToPrevious()
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
     }
 
     private fun next(startId: Int) {
@@ -220,6 +286,7 @@ class PlaybackService : MediaSessionService() {
         player.seekToNextMediaItem() // wraps to the first item because of REPEAT_MODE_ALL
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
         player.play()
+        floating.onStartedFromOutside()
     }
 
     /**
@@ -379,6 +446,11 @@ class PlaybackService : MediaSessionService() {
      */
     private fun leaveForegroundIfPaused(placeholderPosted: Boolean) {
         if (player.playWhenReady) return // Media3 takes over the foreground notification
+        if (floating.isShown && player.mediaItemCount > 0) {
+            // Stay foreground for the floating record; swap the placeholder for Media3's notice.
+            if (placeholderPosted) onUpdateNotification(session, true)
+            return
+        }
         val media3WillNotify = player.mediaItemCount > 0 && player.playbackState != Player.STATE_IDLE
         if (media3WillNotify) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
@@ -394,6 +466,8 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_TOGGLE = "com.example.recordwidget.TOGGLE"
         const val ACTION_NEXT = "com.example.recordwidget.NEXT"
         const val ACTION_RELOAD = "com.example.recordwidget.RELOAD"
+        const val ACTION_PREV = "com.example.recordwidget.PREV"
+        const val ACTION_FLOATING = "com.example.recordwidget.FLOATING"
 
         /** = DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID / DEFAULT_CHANNEL_ID. */
         const val NOTIFICATION_ID = 1001
@@ -415,6 +489,16 @@ class PlaybackService : MediaSessionService() {
          * is no queue to fix, so only the widget is redrawn. Otherwise plain startService (the
          * activity is in the foreground, or the service is, which counts as foreground).
          */
+        /** For MainActivity after the floating-record setting or permission changed. */
+        fun floatingChanged(ctx: Context) {
+            if (!isRunning) return
+            try {
+                ctx.startService(Intent(ctx, PlaybackService::class.java).setAction(ACTION_FLOATING))
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "floating update not delivered", e)
+            }
+        }
+
         fun reload(ctx: Context) {
             if (!isRunning) {
                 RecordWidget.refresh(ctx)

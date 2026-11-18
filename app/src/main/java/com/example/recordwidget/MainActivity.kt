@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -18,6 +19,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -32,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: TrackAdapter
     private lateinit var addButton: Button
     private lateinit var addUrlButton: Button
+    private lateinit var floatingSwitch: SwitchCompat
     private lateinit var progressText: TextView
     private lateinit var emptyText: TextView
     private lateinit var list: RecyclerView
@@ -56,6 +59,8 @@ class MainActivity : AppCompatActivity() {
 
         addButton = findViewById(R.id.addButton)
         addUrlButton = findViewById(R.id.addUrlButton)
+        floatingSwitch = findViewById(R.id.floatingSwitch)
+        floatingSwitch.setOnCheckedChangeListener { _, on -> if (!syncingSwitch) onFloatingSwitch(on) }
         progressText = findViewById(R.id.progressText)
         emptyText = findViewById(R.id.emptyText)
         list = findViewById(R.id.trackList)
@@ -167,6 +172,33 @@ class MainActivity : AppCompatActivity() {
             finishOne()
             toast(message)
         }
+    }
+
+    private var syncingSwitch = false
+
+    override fun onResume() {
+        super.onResume()
+        // Back from the permission screen (or the permission was revoked meanwhile).
+        syncingSwitch = true
+        floatingSwitch.isChecked = FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this)
+        syncingSwitch = false
+        PlaybackService.floatingChanged(this)
+    }
+
+    private fun onFloatingSwitch(on: Boolean) {
+        FloatingRecord.setEnabled(this, on)
+        if (on && !Settings.canDrawOverlays(this)) {
+            toast(getString(R.string.floating_need_permission))
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+                )
+            } catch (e: android.content.ActivityNotFoundException) {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            }
+            return // onResume finishes the job
+        }
+        PlaybackService.floatingChanged(this)
     }
 
     /** Asks for a web link (prefilled when shared from another app). */
