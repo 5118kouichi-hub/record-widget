@@ -64,7 +64,8 @@ class FanMenu(
             addView(iconMenu, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
             addView(iconClose, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
             isClickable = true
-            setOnClickListener { if (overlay == null) open() else close(null) }
+            // NB: inside apply{} a bare `overlay` would be View.getOverlay(), never null.
+            setOnClickListener { if (this@FanMenu.overlay == null) open() else close(null) }
             elevation = dp(4).toFloat()
         }
     }
