@@ -577,7 +577,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         setTextColor(if (primary) 0xFFFFFFFF.toInt() else st.accent)
         background = GradientDrawable().apply {
             cornerRadius = dp(if (st.isIos) 12 else 22).toFloat()
-            setColor(if (primary) st.accent else if (st.dark) 0xFF2C2C2E.toInt() else 0xFFE9E9EB.toInt())
+            setColor(if (primary) st.accent else 0xFFE6D8BC.toInt())
         }
         minHeight = dp(44)
         setOnClickListener { onClick() }

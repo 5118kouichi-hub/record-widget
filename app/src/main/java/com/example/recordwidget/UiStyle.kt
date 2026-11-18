@@ -1,85 +1,49 @@
 package com.example.recordwidget
 
 import android.content.Context
-import android.content.res.Configuration
+import android.graphics.Typeface
 
 /**
- * The two looks the user can pick for the app screen and the floating record's list:
- * Galaxy One UI-like (default) and iPhone iOS-like. Both follow the system light/dark mode.
- *
- * Only colors, sizes and layout rhythm imitate those systems; no fonts, icons or other
- * assets are copied.
+ * The app's one look: a retro listening room that matches the widget's portable player.
+ * Dark walnut background, cream paper cards, the player's red, mustard captions, serif headings.
  */
-enum class UiKind { ONE_UI, IOS }
+class UiStyle private constructor() {
+    /** Walnut background and text on it. */
+    val bg = 0xFF1C130F.toInt()
+    val bgGrain = 0x14FFE0B2
+    val onBg = 0xFFF3E9D2.toInt()
+    val onBgSub = 0xFFB9A58F.toInt()
 
-class UiStyle private constructor(val kind: UiKind, val dark: Boolean) {
-    val isIos get() = kind == UiKind.IOS
+    /** Cream paper cards and text on them. */
+    val card = 0xFFF3E9D2.toInt()
+    val text = 0xFF2A1F1A.toInt()
+    val sub = 0xFF7A6A5C.toInt()
+    val separator = 0xFFE0D2B6.toInt()
 
-    val bg: Int
-    val card: Int
-    val text: Int
-    val sub: Int
-    val accent: Int
-    val separator: Int
-    val danger: Int
-    val switchOn: Int
-    val pressed: Int
+    val accent = 0xFFC62828.toInt() // the player's red
+    val mustard = 0xFFE0A526.toInt()
+    val danger = 0xFFB3261E.toInt()
+    val switchOn = accent
+    val pressed = 0x1F3E2723
 
-    /** Card corner radius, row height, side margin of groups (dp). */
-    val cardRadiusDp: Int
-    val rowHeightDp: Int
-    val groupMarginDp: Int
+    val cardRadiusDp = 16
+    val rowHeightDp = 56
+    val groupMarginDp = 16
 
-    init {
-        if (kind == UiKind.IOS) {
-            bg = if (dark) 0xFF000000.toInt() else 0xFFF2F2F7.toInt()
-            card = if (dark) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
-            text = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
-            sub = if (dark) 0xFF8D8D93.toInt() else 0xFF8A8A8E.toInt()
-            accent = if (dark) 0xFF0A84FF.toInt() else 0xFF007AFF.toInt()
-            separator = if (dark) 0xFF38383A.toInt() else 0xFFC6C6C8.toInt()
-            danger = if (dark) 0xFFFF453A.toInt() else 0xFFFF3B30.toInt()
-            switchOn = if (dark) 0xFF30D158.toInt() else 0xFF34C759.toInt()
-            cardRadiusDp = 10
-            rowHeightDp = 50
-            groupMarginDp = 16
-        } else {
-            bg = if (dark) 0xFF000000.toInt() else 0xFFF6F6F6.toInt()
-            card = if (dark) 0xFF171717.toInt() else 0xFFFFFFFF.toInt()
-            text = if (dark) 0xFFFAFAFA.toInt() else 0xFF0B0B0B.toInt()
-            sub = if (dark) 0xFF9E9E9E.toInt() else 0xFF737373.toInt()
-            accent = if (dark) 0xFF5B9DFF.toInt() else 0xFF2F7BF5.toInt()
-            separator = if (dark) 0xFF2A2A2A.toInt() else 0xFFEDEDED.toInt()
-            danger = if (dark) 0xFFFF6B6B.toInt() else 0xFFE53935.toInt()
-            switchOn = accent
-            cardRadiusDp = 26
-            rowHeightDp = 60
-            groupMarginDp = 12
-        }
-        pressed = if (dark) 0x33FFFFFF else 0x1F000000
-    }
+    /** Kept for the list panel's shape choices (no iOS-like look any more). */
+    val isIos = false
+
+    /** The cards are light whatever the system mode. */
+    val dark = false
+
+    val serifBold: Typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+    val serif: Typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
 
     companion object {
-        private const val PREFS = "ui"
-        private const val KEY = "style"
+        private val INSTANCE = UiStyle()
 
-        fun kind(ctx: Context): UiKind =
-            when (ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)) {
-                "ios" -> UiKind.IOS
-                else -> UiKind.ONE_UI // default
-            }
+        fun current(@Suppress("UNUSED_PARAMETER") ctx: Context): UiStyle = INSTANCE
 
-        fun setKind(ctx: Context, kind: UiKind) {
-            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY, if (kind == UiKind.IOS) "ios" else "oneui").apply()
-        }
-
-        fun current(ctx: Context): UiStyle {
-            val night = ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-            return UiStyle(kind(ctx), night == Configuration.UI_MODE_NIGHT_YES)
-        }
-
-        fun themeRes(ctx: Context): Int =
-            if (kind(ctx) == UiKind.IOS) R.style.Theme_RecordWidget_IOS else R.style.Theme_RecordWidget_OneUI
+        fun themeRes(@Suppress("UNUSED_PARAMETER") ctx: Context): Int = R.style.Theme_RecordWidget_Retro
     }
 }

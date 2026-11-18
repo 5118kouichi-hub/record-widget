@@ -53,10 +53,9 @@ class MainActivity : AppCompatActivity() {
                     pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
                 override fun onAddUrl() = askUrl(null)
                 override fun onFloatingSwitch(on: Boolean) = this@MainActivity.onFloatingSwitch(on)
-                override fun onStyle(kind: UiKind) {
-                    UiStyle.setKind(this@MainActivity, kind)
-                    recreate()
-                }
+                override fun onToggle() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_TOGGLE)
+                override fun onPrevious() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_PREV)
+                override fun onNext() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_NEXT)
                 override fun onRename(t: Track) = confirmRename(t)
                 override fun onDelete(t: Track) = confirmDelete(t)
                 override fun onMove(from: Int, to: Int) = moveTrack(from, to)
@@ -207,6 +206,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** The floating record's list may have reordered tracks while this screen stayed open. */
+    /** The big player follows the service (or shows where playback will resume). */
+    private val nowPlayingObserver: (PlaybackService.Companion.NowPlaying) -> Unit = { np ->
+        if (!isDestroyed) showNowPlaying(np)
+    }
+
+    private var thumbFor: Pair<String, android.graphics.Bitmap?>? = null
+
+    private fun showNowPlaying(np: PlaybackService.Companion.NowPlaying = PlaybackService.nowPlaying) {
+        val tracks = PlaybackState.queueTracks(this)
+        val track = tracks.firstOrNull { it.id == np.trackId } ?: PlaybackState.resumeTrack(this, tracks)
+        val thumb = track?.let { t ->
+            thumbFor?.takeIf { it.first == t.id }?.second ?: store.thumbFor(t.id).takeIf { it.isFile }
+                ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+                .also { thumbFor = t.id to it }
+        }
+        screen.showNowPlaying(np.title ?: track?.title, thumb, np.turning, tracks.isNotEmpty())
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PlaybackService.observe(nowPlayingObserver)
+    }
+
+    override fun onStop() {
+        PlaybackService.unobserve(nowPlayingObserver)
+        super.onStop()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) refresh()
@@ -338,6 +365,7 @@ class MainActivity : AppCompatActivity() {
             emptyList()
         }
         screen.showTracks(tracks)
+        showNowPlaying()
     }
 
     private fun changed() {

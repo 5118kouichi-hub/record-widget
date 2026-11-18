@@ -66,15 +66,11 @@
     <string name="cd_looping">くり返し再生中</string>
     <string name="cd_drag">ドラッグで並べ替え</string>
     <string name="header_title">レコードウィジェット</string>
-    <string name="header_count">%1$d件の音声</string>
+    <string name="header_count">%1$d 枚</string>
     <string name="section_add">追加</string>
     <string name="section_floating">浮かぶレコード</string>
     <string name="section_tracks">音声</string>
-    <string name="section_design">デザイン</string>
     <string name="floating_switch_short">他のアプリの上に表示</string>
-    <string name="style_oneui">Galaxy（One UI）風</string>
-    <string name="style_ios">iPhone（iOS）風</string>
-    <string name="style_footer">アプリの画面と、浮かぶレコードを長押しして開く一覧の見た目が変わります。明るさは端末のダークモード設定に合わせます。</string>
     <string name="section_update">アップデート</string>
     <string name="update_auto">新しいバージョンをお知らせ</string>
     <string name="update_check_now">今すぐ確認</string>
@@ -99,4 +95,6 @@
     <string name="section_volume">音量</string>
     <string name="volume_footer">このアプリの音量です（スマホのメディア音量の中で調整します）。浮かぶレコードの一覧でも変えられます。</string>
     <string name="update_notif_text">build-%1$d が出ました。タップしてダウンロードし、開いてインストールしてください</string>
+    <string name="hero_hint">レコードをタップで再生／一時停止・キーで前の曲／次の曲</string>
+    <string name="hero_hint_empty">下の「追加」から動画を選ぶと、ここで再生できます</string>
 </resources>

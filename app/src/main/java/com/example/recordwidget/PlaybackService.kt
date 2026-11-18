@@ -367,6 +367,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         isRunning = false
         isPlaying = false
+        publish(NowPlaying(false, null, null))
         if (player.mediaItemCount > 0) saveResume()
         player.removeListener(listener)
         floating.release()
@@ -547,7 +548,9 @@ class PlaybackService : MediaSessionService() {
     private fun updateWidget() {
         val turning = isActive() &&
             player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
-        RecordWidget.update(this, turning, currentTitle(), player.currentMediaItem?.mediaId)
+        val id = player.currentMediaItem?.mediaId
+        RecordWidget.update(this, turning, currentTitle(), id)
+        publish(NowPlaying(turning, currentTitle(), id)) // the app screen's big player
     }
 
     /**
@@ -637,6 +640,43 @@ class PlaybackService : MediaSessionService() {
         @Volatile
         var isRunning = false
             private set
+
+        /** What the app screen's big player shows. null title/id = the track playback resumes with. */
+        data class NowPlaying(val turning: Boolean, val title: String?, val trackId: String?)
+
+        @Volatile var nowPlaying = NowPlaying(false, null, null)
+            private set
+
+        private val observers = java.util.concurrent.CopyOnWriteArrayList<(NowPlaying) -> Unit>()
+        private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+        /** Main thread. Called at once with the current state. */
+        fun observe(o: (NowPlaying) -> Unit) {
+            observers.add(o)
+            o(nowPlaying)
+        }
+
+        fun unobserve(o: (NowPlaying) -> Unit) {
+            observers.remove(o)
+        }
+
+        private fun publish(np: NowPlaying) {
+            if (np == nowPlaying) return
+            nowPlaying = np
+            mainHandler.post { observers.forEach { it(np) } }
+        }
+
+        /** Play/pause, next, previous from the app screen (same path as the widget's keys). */
+        fun command(ctx: Context, action: String) {
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    ctx,
+                    Intent(ctx, PlaybackService::class.java).setAction(action),
+                )
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "command not delivered", e)
+            }
+        }
 
         /** Sound is coming out right now (the updater never installs then). */
         @Volatile var isPlaying = false

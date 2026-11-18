@@ -2,19 +2,26 @@ package com.example.recordwidget
 
 import android.app.Activity
 import android.content.res.ColorStateList
-import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.Shader
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.ViewCompat
@@ -23,12 +30,9 @@ import androidx.core.view.WindowInsetsCompat
 import kotlin.math.roundToInt
 
 /**
- * The app screen, built in code so the same content can take two looks ([UiStyle]):
- *
- *  - One UI-like: a tall header with a centered title (content starts low, within thumb
- *    reach), big round cards, roomy rows.
- *  - iOS-like: a left-aligned large title, grey section captions above inset grouped lists,
- *    hairline separators, blue text actions, green switches.
+ * The app screen: a retro listening room. A walnut table with the big portable player on
+ * it (play from here too), and below it cream paper cards like record sleeves, each under a
+ * small red record-label caption.
  */
 class MainScreen(
     private val activity: Activity,
@@ -39,7 +43,6 @@ class MainScreen(
         fun onAddVideo()
         fun onAddUrl()
         fun onFloatingSwitch(on: Boolean)
-        fun onStyle(kind: UiKind)
         fun onRename(t: Track)
         fun onDelete(t: Track)
         fun onMove(from: Int, to: Int)
@@ -50,6 +53,9 @@ class MainScreen(
         fun onVolume(v: Float)
         fun autoUpdateOn(): Boolean
         fun onCheckUpdate()
+        fun onToggle()
+        fun onPrevious()
+        fun onNext()
     }
 
     private val density = activity.resources.displayMetrics.density
@@ -65,73 +71,77 @@ class MainScreen(
     private lateinit var progressText: TextView
     private lateinit var countText: TextView
     private lateinit var tracksGroup: LinearLayout
+    private lateinit var hero: HeroPlayerView
+    private lateinit var heroHint: TextView
+    private lateinit var updateStatus: TextView
+    private var syncing = false
 
-    /** Builds the screen and makes it the activity's content. */
     fun install() {
         val window = activity.window
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = s.bg
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = !s.dark
-            isAppearanceLightNavigationBars = !s.dark
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
 
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 0, 0, dp(32))
+            setPadding(0, dp(8), 0, dp(40))
         }
-        content.addView(header())
+
+        // ---- the player on the table ----
+        content.addView(masthead())
+        hero = HeroPlayerView(activity).apply {
+            listener = object : HeroPlayerView.Listener {
+                override fun onToggle() = callbacks.onToggle()
+                override fun onPrevious() = callbacks.onPrevious()
+                override fun onNext() = callbacks.onNext()
+            }
+        }
+        content.addView(
+            hero,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = dp(16)
+                rightMargin = dp(16)
+                topMargin = dp(14)
+            },
+        )
+        heroHint = onBgText(activity.getString(R.string.hero_hint), 12f, s.onBgSub).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(10), dp(16), 0)
+        }
+        content.addView(heroHint)
+        content.addView(volumeBar())
+
+        // ---- sleeves ----
+        content.addView(caption(R.string.section_tracks))
+        tracksGroup = card()
+        content.addView(tracksGroup)
+        content.addView(footer(R.string.hint_widget))
 
         content.addView(caption(R.string.section_add))
         addVideoRow = actionRow(R.drawable.ic_video, R.string.add_from_video) { callbacks.onAddVideo() }
         addUrlRow = actionRow(R.drawable.ic_link, R.string.add_from_url) { callbacks.onAddUrl() }
-        content.addView(group(addVideoRow, addUrlRow))
+        content.addView(card(addVideoRow, addUrlRow))
         progressText = footer(R.string.extracting).apply {
-            setTextColor(s.accent)
+            setTextColor(s.mustard)
             visibility = View.GONE
         }
         content.addView(progressText)
 
-        content.addView(caption(R.string.section_volume))
-        content.addView(group(volumeRow()))
-        content.addView(footer(R.string.volume_footer))
-
         content.addView(caption(R.string.section_floating))
-        floatingSwitch = SwitchCompat(activity).apply {
-            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-            trackTintList = ColorStateList(states, intArrayOf(s.switchOn, s.separator))
-            thumbTintList = ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()))
-            setOnCheckedChangeListener { _, on -> if (!syncing) callbacks.onFloatingSwitch(on) }
-        }
-        content.addView(group(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)))
+        floatingSwitch = switch { on -> if (!syncing) callbacks.onFloatingSwitch(on) }
+        content.addView(card(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)))
         content.addView(footer(R.string.floating_hint))
 
-        content.addView(caption(R.string.section_tracks))
-        tracksGroup = group()
-        content.addView(tracksGroup)
-        content.addView(footer(R.string.hint_widget))
-
-        content.addView(caption(R.string.section_design))
-        content.addView(
-            group(
-                choiceRow(R.string.style_oneui, s.kind == UiKind.ONE_UI) { callbacks.onStyle(UiKind.ONE_UI) },
-                choiceRow(R.string.style_ios, s.kind == UiKind.IOS) { callbacks.onStyle(UiKind.IOS) },
-            ),
-        )
-        content.addView(footer(R.string.style_footer))
-
         content.addView(caption(R.string.section_update))
-        val updateSwitch = SwitchCompat(activity).apply {
-            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-            trackTintList = ColorStateList(states, intArrayOf(s.switchOn, s.separator))
-            thumbTintList = ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()))
-            isChecked = callbacks.autoUpdateOn()
-            setOnCheckedChangeListener { _, on -> callbacks.onAutoUpdate(on) }
-        }
+        val updateSwitch = switch { on -> callbacks.onAutoUpdate(on) }
+        updateSwitch.isChecked = callbacks.autoUpdateOn()
         updateStatus = footer(0)
         content.addView(
-            group(
+            card(
                 switchRow(R.drawable.ic_update, R.string.update_auto, updateSwitch),
                 actionRow(R.drawable.ic_update, R.string.update_check_now) { callbacks.onCheckUpdate() },
             ),
@@ -139,7 +149,7 @@ class MainScreen(
         content.addView(updateStatus)
 
         val scroll = ScrollView(activity).apply {
-            setBackgroundColor(s.bg)
+            background = WoodDrawable(s.bg, s.bgGrain, density)
             isFillViewport = true
             clipToPadding = false
             addView(content)
@@ -152,13 +162,7 @@ class MainScreen(
         activity.setContentView(scroll)
     }
 
-    private var syncing = false
-    private lateinit var updateStatus: TextView
-
-    /** Line under the update section: current version / progress / result. */
-    fun setUpdateStatus(text: String) {
-        updateStatus.text = text
-    }
+    // ---- state from MainActivity ---------------------------------------------------------
 
     fun setFloatingChecked(on: Boolean) {
         syncing = true
@@ -174,6 +178,15 @@ class MainScreen(
         progressText.visibility = if (busy) View.VISIBLE else View.GONE
     }
 
+    fun setUpdateStatus(text: String) {
+        updateStatus.text = text
+    }
+
+    fun showNowPlaying(title: String?, thumb: Bitmap?, turning: Boolean, hasTracks: Boolean) {
+        hero.show(title ?: activity.getString(R.string.widget_empty_hint), thumb, turning)
+        heroHint.text = activity.getString(if (hasTracks) R.string.hero_hint else R.string.hero_hint_empty)
+    }
+
     fun showTracks(tracks: List<Track>) {
         countText.text = activity.getString(R.string.header_count, tracks.size)
         tracksGroup.removeAllViews()
@@ -181,98 +194,117 @@ class MainScreen(
             tracksGroup.addView(
                 text(activity.getString(R.string.empty_list), 15f, s.sub).apply {
                     gravity = Gravity.CENTER
-                    setPadding(dp(16), dp(20), dp(16), dp(20))
+                    setPadding(dp(16), dp(22), dp(16), dp(22))
                 },
             )
             return
         }
         tracks.forEachIndexed { i, t ->
-            if (i > 0) tracksGroup.addView(separator(withIcon = false))
+            if (i > 0) tracksGroup.addView(separator())
             tracksGroup.addView(trackRow(t, i, tracks.size))
         }
     }
 
-    // ---- header --------------------------------------------------------------------------
+    // ---- pieces --------------------------------------------------------------------------
 
-    private fun header(): View {
-        val title = text(activity.getString(R.string.header_title), 0f, s.text)
-        countText = text("", 0f, s.sub)
-        return if (s.isIos) {
-            // Large title, left aligned, just under the status bar.
-            LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(4))
-                addView(countText.apply { textSize = 13f })
-                addView(
-                    title.apply {
-                        textSize = 34f
-                        setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-                        letterSpacing = -0.01f
-                    },
-                )
-            }
-        } else {
-            // Expanded header: about a third of the screen, title centered.
-            val h = (activity.resources.displayMetrics.heightPixels * 0.30f).toInt()
-            LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                minimumHeight = h
-                setPadding(dp(24), dp(24), dp(24), dp(24))
-                addView(
-                    title.apply {
-                        textSize = 32f
-                        gravity = Gravity.CENTER
-                    },
-                )
-                addView(
-                    countText.apply {
-                        textSize = 15f
-                        gravity = Gravity.CENTER
-                        setPadding(0, dp(6), 0, 0)
-                    },
-                )
-            }
+    /** App name in serif on the wood, with the number of records like a shelf label. */
+    private fun masthead(): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.BOTTOM
+        setPadding(dp(20), dp(12), dp(20), 0)
+        addView(
+            onBgText(activity.getString(R.string.header_title), 26f, s.onBg).apply { typeface = s.serifBold },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        countText = onBgText("", 13f, s.mustard).apply {
+            typeface = s.serif
+            setPadding(0, 0, 0, dp(4))
         }
+        addView(countText)
     }
 
-    // ---- groups and rows -----------------------------------------------------------------
-
-    private fun caption(res: Int): View = text(activity.getString(res), if (s.isIos) 13f else 14f, s.sub).apply {
-        if (!s.isIos) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-        val side = if (s.isIos) s.groupMarginDp + 16 else s.groupMarginDp + 20
-        setPadding(dp(side), dp(if (s.isIos) 22 else 20), dp(side), dp(6))
+    /** − slider + on the wood, under the player. */
+    private fun volumeBar(): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(20), dp(6), dp(20), 0)
+        val bar = SeekBar(activity).apply {
+            max = 100
+            progress = (callbacks.volume() * 100).roundToInt()
+            progressTintList = ColorStateList.valueOf(s.mustard)
+            thumbTintList = ColorStateList.valueOf(s.onBg)
+            progressBackgroundTintList = ColorStateList.valueOf(s.onBgSub)
+            contentDescription = activity.getString(R.string.cd_volume)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                    if (fromUser) callbacks.onVolume(p / 100f)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar) {}
+                override fun onStopTrackingTouch(sb: SeekBar) {}
+            })
+        }
+        addView(icon(R.drawable.ic_volume_down, s.onBgSub))
+        addView(bar, LinearLayout.LayoutParams(0, dp(44), 1f))
+        val up = icon(R.drawable.ic_volume_up, s.onBgSub)
+        (up.layoutParams as LinearLayout.LayoutParams).apply {
+            rightMargin = 0
+            leftMargin = dp(4)
+        }
+        addView(up)
     }
 
-    private fun footer(res: Int): TextView = text(if (res == 0) "" else activity.getString(res), 13f, s.sub).apply {
-        val side = if (s.isIos) s.groupMarginDp + 16 else s.groupMarginDp + 20
-        setPadding(dp(side), dp(6), dp(side), 0)
+    /** Section caption: a small red record-label dot and serif mustard text. */
+    private fun caption(res: Int): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(s.groupMarginDp + 4), dp(26), dp(20), dp(8))
+        addView(
+            View(activity).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(s.accent)
+                    setStroke(dp(2), s.mustard)
+                }
+            },
+            LinearLayout.LayoutParams(dp(12), dp(12)).apply { rightMargin = dp(10) },
+        )
+        addView(
+            onBgText(activity.getString(res), 15f, s.mustard).apply {
+                typeface = s.serifBold
+                letterSpacing = 0.08f
+            },
+        )
     }
 
-    private fun group(vararg rows: View): LinearLayout = LinearLayout(activity).apply {
+    private fun footer(res: Int): TextView = onBgText(if (res == 0) "" else activity.getString(res), 12.5f, s.onBgSub).apply {
+        setPadding(dp(s.groupMarginDp + 6), dp(8), dp(s.groupMarginDp + 6), 0)
+        setLineSpacing(0f, 1.15f)
+    }
+
+    /** A cream paper sleeve with a soft shadow. */
+    private fun card(vararg rows: View): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        background = GradientDrawable().apply {
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(s.card, 0xFFEBDDBF.toInt())).apply {
             cornerRadius = dpf(s.cardRadiusDp)
-            setColor(s.card)
         }
+        elevation = dpf(6)
         clipToOutline = true
+        setPadding(0, dp(4), 0, dp(4))
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             leftMargin = dp(s.groupMarginDp)
             rightMargin = dp(s.groupMarginDp)
         }
-        if (!s.isIos) setPadding(0, dp(6), 0, dp(6))
         rows.forEachIndexed { i, r ->
-            if (i > 0) addView(separator(withIcon = true))
+            if (i > 0) addView(separator())
             addView(r)
         }
     }
 
-    private fun separator(withIcon: Boolean): View = View(activity).apply {
+    private fun separator(): View = View(activity).apply {
         setBackgroundColor(s.separator)
-        val inset = if (s.isIos) (if (withIcon) 56 else 16) else 20
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (s.isIos) 1 else dp(1)).apply {
-            leftMargin = dp(inset)
-            rightMargin = if (s.isIos) 0 else dp(20)
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+            leftMargin = dp(18)
+            rightMargin = dp(18)
         }
     }
 
@@ -286,113 +318,67 @@ class MainScreen(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = dp(s.rowHeightDp)
-        val side = if (s.isIos) 16 else 20
-        setPadding(dp(side), dp(4), dp(side - 4), dp(4))
-    }
-
-    private fun volumeRow(): View = rowBase().apply {
-        val bar = android.widget.SeekBar(activity).apply {
-            max = 100
-            progress = (callbacks.volume() * 100).roundToInt()
-            progressTintList = ColorStateList.valueOf(s.accent)
-            thumbTintList = ColorStateList.valueOf(s.accent)
-            contentDescription = activity.getString(R.string.cd_volume)
-            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
-                    if (fromUser) callbacks.onVolume(p / 100f)
-                }
-                override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
-                override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
-            })
-        }
-        addView(icon(R.drawable.ic_volume_down, s.sub).apply { (layoutParams as LinearLayout.LayoutParams).rightMargin = dp(4) })
-        addView(bar, LinearLayout.LayoutParams(0, dp(44), 1f))
-        addView(icon(R.drawable.ic_volume_up, s.sub).apply { (layoutParams as LinearLayout.LayoutParams).rightMargin = 0 })
+        setPadding(dp(18), dp(4), dp(12), dp(4))
     }
 
     private fun icon(res: Int, tint: Int): ImageView = ImageView(activity).apply {
         setImageResource(res)
         imageTintList = ColorStateList.valueOf(tint)
-        layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(16) }
+        layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(14) }
     }
 
     private fun actionRow(iconRes: Int, label: Int, onClick: () -> Unit): View = rowBase().apply {
-        // iOS: blue text actions; One UI: normal text with a tinted icon.
         addView(icon(iconRes, s.accent))
+        addView(text(activity.getString(label), 16f, s.text), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(
-            text(activity.getString(label), 17f, if (s.isIos) s.accent else s.text),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            ImageView(activity).apply {
+                setImageResource(R.drawable.ic_next)
+                imageTintList = ColorStateList.valueOf(s.sub)
+            },
+            LinearLayout.LayoutParams(dp(14), dp(14)),
         )
         pressable(this)
         setOnClickListener { onClick() }
     }
 
+    private fun switch(onChange: (Boolean) -> Unit) = SwitchCompat(activity).apply {
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+        trackTintList = ColorStateList(states, intArrayOf(s.accent, s.separator))
+        thumbTintList = ColorStateList(states, intArrayOf(0xFFFFF8EA.toInt(), 0xFFFFFFFF.toInt()))
+        setOnCheckedChangeListener { _, on -> onChange(on) }
+    }
+
     private fun switchRow(iconRes: Int, label: Int, sw: SwitchCompat): View = rowBase().apply {
         addView(icon(iconRes, s.accent))
-        addView(
-            text(activity.getString(label), 17f, s.text),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        addView(text(activity.getString(label), 16f, s.text), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(sw)
         pressable(this)
         setOnClickListener { sw.toggle() }
     }
 
-    private fun choiceRow(label: Int, selected: Boolean, onClick: () -> Unit): View = rowBase().apply {
+    /** A track like a line on the back of a record sleeve: number, title (tap to rename), controls. */
+    private fun trackRow(t: Track, index: Int, count: Int): View = rowBase().apply {
         addView(
-            text(activity.getString(label), 17f, s.text),
+            text("%02d".format(index + 1), 13f, s.accent).apply {
+                typeface = s.serifBold
+                minWidth = dp(28)
+            },
+        )
+        addView(
+            text(t.title, 16f, s.text).apply {
+                typeface = s.serif
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                contentDescription = activity.getString(R.string.rename_title) + " " + t.title
+            },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
-        if (s.isIos) {
-            // iOS: a check mark on the chosen row.
-            addView(
-                ImageView(activity).apply {
-                    setImageResource(R.drawable.ic_check)
-                    imageTintList = ColorStateList.valueOf(s.accent)
-                    visibility = if (selected) View.VISIBLE else View.INVISIBLE
-                },
-                LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(4) },
-            )
-        } else {
-            // One UI: a radio dot.
-            addView(radioDot(selected), LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(4) })
-        }
-        contentDescription = activity.getString(label) + if (selected) "（選択中）" else ""
-        pressable(this)
-        setOnClickListener { if (!selected) onClick() }
-    }
-
-    private fun radioDot(selected: Boolean): View = FrameLayout(activity).apply {
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setStroke(dp(2), if (selected) s.accent else s.sub)
-        }
-        if (selected) {
-            addView(
-                View(activity).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(s.accent)
-                    }
-                },
-                FrameLayout.LayoutParams(dp(12), dp(12), Gravity.CENTER),
-            )
-        }
-    }
-
-    private fun trackRow(t: Track, index: Int, count: Int): View = rowBase().apply {
-        val title = text(t.title, 17f, s.text).apply {
-            maxLines = 2
-            ellipsize = TextUtils.TruncateAt.END
-            contentDescription = activity.getString(R.string.rename_title) + " " + t.title
-        }
-        addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val fav = callbacks.isFavorite(t)
         addView(
             smallButton(
                 if (fav) R.drawable.ic_star else R.drawable.ic_star_border,
                 if (fav) R.string.cd_fav_remove else R.string.cd_fav_add,
-                if (fav) 0xFFFFB300.toInt() else s.sub,
+                if (fav) s.mustard else s.sub,
                 true,
             ) { callbacks.onFavorite(t) },
         )
@@ -413,13 +399,68 @@ class MainScreen(
             alpha = if (enabled) 1f else 0.25f
             val p = dp(10)
             setPadding(p, p, p, p)
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(44))
             setOnClickListener { onClick() }
         }
 
     private fun text(value: String, sizeSp: Float, color: Int): TextView = TextView(activity).apply {
         text = value
-        if (sizeSp > 0f) textSize = sizeSp
+        textSize = sizeSp
         setTextColor(color)
+    }
+
+    private fun onBgText(value: String, sizeSp: Float, color: Int): TextView = text(value, sizeSp, color).apply {
+        setShadowLayer(4f, 0f, 1f, 0x99000000.toInt())
+    }
+
+    /** Dark walnut with faint wavy grain lines and a warm lamp glow at the top. */
+    private class WoodDrawable(private val base: Int, private val grain: Int, private val density: Float) : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val glow = Paint()
+        private var cache: Bitmap? = null
+
+        /** Drawn once per size into a bitmap; scrolling then only copies it. */
+        override fun draw(canvas: Canvas) {
+            val b = bounds
+            if (b.width() <= 0 || b.height() <= 0) return
+            val c = cache?.takeIf { it.width == b.width() && it.height == b.height() }
+                ?: Bitmap.createBitmap(b.width(), b.height(), Bitmap.Config.RGB_565).also {
+                    cache?.recycle()
+                    paintWood(Canvas(it), it.width, it.height)
+                    cache = it
+                }
+            canvas.drawBitmap(c, b.left.toFloat(), b.top.toFloat(), null)
+        }
+
+        private fun paintWood(canvas: Canvas, w: Int, h: Int) {
+            val b = android.graphics.Rect(0, 0, w, h)
+            canvas.drawColor(base)
+            paint.color = grain
+            paint.strokeWidth = 1.2f * density
+            var y = 0f
+            var i = 0
+            while (y < b.height()) {
+                y += (10 + (i * 37 % 23)) * density
+                val amp = (2 + i % 4) * density
+                var x = 0f
+                var lastY = y + amp * kotlin.math.sin(i.toFloat())
+                while (x < b.width()) {
+                    val nx = x + 24 * density
+                    val ny = y + amp * kotlin.math.sin(nx / (90 * density) + i)
+                    canvas.drawLine(x, lastY, nx, ny, paint)
+                    x = nx
+                    lastY = ny
+                }
+                i++
+            }
+            glow.shader = LinearGradient(0f, 0f, 0f, b.height() * 0.45f, 0x33FFC680, 0x00FFC680, Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, 0f, b.width().toFloat(), b.height() * 0.45f, glow)
+        }
+
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(colorFilter: ColorFilter?) {}
+
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = PixelFormat.OPAQUE
     }
 }
