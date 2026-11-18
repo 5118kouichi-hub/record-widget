@@ -150,28 +150,41 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
-        override fun previous() = skipBack()
+        override fun previous() {
+            if (applyPendingReload()) skipBack()
+        }
 
         override fun next() {
+            if (!applyPendingReload()) return
             player.seekToNextMediaItem()
             if (player.playbackState == Player.STATE_IDLE) player.prepare()
         }
 
         override fun onShownChanged(shown: Boolean) {
-            // Shown: stay in the foreground even when paused, so the record does not vanish
-            // when Android reaps idle background services. Hidden: back to Media3's rule.
-            try {
-                onUpdateNotification(session, isActive() || shown)
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "foreground change refused", e)
-            }
+            // Playing: Media3 already keeps the service in the foreground. Idle/not yet
+            // connected: Media3 would only drop the placeholder; it re-evaluates on its next
+            // event anyway (through the override below).
+            if (isActive() || player.playbackState == Player.STATE_IDLE) return
+            // Paused: shown -> stay foreground so the record does not vanish when Android
+            // reaps idle background services; hidden -> back to Media3's rule.
+            onUpdateNotification(session, shown)
         }
     }
 
-    /** Media3 decides foreground vs not from playback; the floating record also counts. */
+    /**
+     * Media3 decides foreground vs not from playback; the floating record also counts.
+     * If forcing the foreground is refused (Android 15 while another app hides overlays),
+     * fall back to Media3's own decision so the notification is still brought up to date.
+     */
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         val keep = ::floating.isInitialized && floating.isShown
-        super.onUpdateNotification(session, startInForegroundRequired || keep)
+        try {
+            super.onUpdateNotification(session, startInForegroundRequired || keep)
+        } catch (e: IllegalStateException) {
+            if (startInForegroundRequired || !keep) throw e
+            Log.w(TAG, "foreground for floating record refused", e)
+            super.onUpdateNotification(session, false)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
@@ -195,7 +208,7 @@ class PlaybackService : MediaSessionService() {
         }
         if (action == ACTION_FLOATING) {
             // Setting changed in the app (plain startService, like RELOAD).
-            floating.sync()
+            floating.refreshSettings()
             if (player.mediaItemCount == 0) stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -448,7 +461,13 @@ class PlaybackService : MediaSessionService() {
         if (player.playWhenReady) return // Media3 takes over the foreground notification
         if (floating.isShown && player.mediaItemCount > 0) {
             // Stay foreground for the floating record; swap the placeholder for Media3's notice.
-            if (placeholderPosted) onUpdateNotification(session, true)
+            if (placeholderPosted) {
+                try {
+                    onUpdateNotification(session, true)
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "foreground for floating record refused", e)
+                }
+            }
             return
         }
         val media3WillNotify = player.mediaItemCount > 0 && player.playbackState != Player.STATE_IDLE

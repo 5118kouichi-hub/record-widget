@@ -194,7 +194,11 @@ class MainActivity : AppCompatActivity() {
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
                 )
             } catch (e: android.content.ActivityNotFoundException) {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                } catch (e2: android.content.ActivityNotFoundException) {
+                    toast(getString(R.string.floating_not_supported))
+                }
             }
             return // onResume finishes the job
         }

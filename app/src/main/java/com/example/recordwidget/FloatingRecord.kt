@@ -1,6 +1,8 @@
 package com.example.recordwidget
 
+import android.content.ComponentCallbacks
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -51,6 +53,31 @@ class FloatingRecord(
     /** Closed by dragging onto ×: stays away until playback is started again from outside. */
     private var dismissed = false
 
+    /** Setting + permission, cached: re-read only on [refreshSettings] (no binder call per event). */
+    private var allowed = readAllowed()
+    private var releasing = false
+
+    private fun readAllowed() = isEnabled(ctx) && Settings.canDrawOverlays(ctx)
+
+    /** The app changed the setting or came back from the permission screen. */
+    fun refreshSettings() {
+        allowed = readAllowed()
+        dismissed = false
+        sync()
+    }
+
+    /** Rotation / screen size change: keep the record on screen. */
+    private val configCallbacks = object : ComponentCallbacks {
+        override fun onConfigurationChanged(newConfig: Configuration) {
+            val lp = params ?: return
+            clamp(lp)
+            updateLayout(lp)
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onLowMemory() {}
+    }
+
     val isShown: Boolean get() = root != null
 
     private val playerListener = object : Player.Listener {
@@ -61,14 +88,16 @@ class FloatingRecord(
 
     /** Shows or hides according to the setting, the permission and the player. */
     fun sync() {
-        val want = isEnabled(ctx) && Settings.canDrawOverlays(ctx) && !dismissed && player.mediaItemCount > 0
+        val want = allowed && !dismissed && !releasing && player.mediaItemCount > 0
         if (want && root == null) show() else if (!want && root != null) hide()
         val rec = record ?: return
         rec.setPlaying(isTurning())
         val id = player.currentMediaItem?.mediaId
         if (id != thumbId) {
-            thumbId = id
-            rec.setThumbnail(id?.let { loadThumb(it) })
+            val bmp = id?.let { loadThumb(it) }
+            rec.setThumbnail(bmp)
+            // Remember only a found thumbnail, so one made later (web videos) is picked up.
+            thumbId = if (bmp != null) id else null
         }
     }
 
@@ -78,13 +107,17 @@ class FloatingRecord(
         sync()
     }
 
+    /** Service is being destroyed: remove the window without asking for foreground changes. */
     fun release() {
+        releasing = true
         player.removeListener(playerListener)
+        ctx.unregisterComponentCallbacks(configCallbacks)
         hide()
     }
 
     init {
         player.addListener(playerListener)
+        ctx.registerComponentCallbacks(configCallbacks)
     }
 
     private fun isTurning(): Boolean =
@@ -119,6 +152,7 @@ class FloatingRecord(
             x = prefs.getInt(KEY_X, screen.widthPixels - dp(RECORD_DP + 12))
             y = prefs.getInt(KEY_Y, (screen.heightPixels * 0.3f).toInt())
         }
+        clamp(lp)
         try {
             wm.addView(box, lp)
         } catch (e: Exception) {
@@ -146,7 +180,7 @@ class FloatingRecord(
         root = null
         record = null
         params = null
-        if (wasShown) actions.onShownChanged(false)
+        if (wasShown && !releasing) actions.onShownChanged(false)
     }
 
     private fun smallButton(icon: Int, cd: Int, onClick: () -> Unit) = ImageButton(ctx).apply {
@@ -170,50 +204,61 @@ class FloatingRecord(
         w,
         h,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT,
     )
 
     // ---- gestures ------------------------------------------------------------------------
 
     private var scratchFrom = 0L
+    private var scratchIndex = 0
     private var scratchTarget = 0L
+    private var dragStartX = 0
+    private var dragStartY = 0
 
     private val recordListener = object : FloatingRecordView.Listener {
         override fun onTap() = actions.togglePlay()
 
-        override fun onDrag(dxPx: Float, dyPx: Float) {
+        override fun onDragStart() {
             val lp = params ?: return
-            val box = root ?: return
-            lp.x += dxPx.roundToInt()
-            lp.y += dyPx.roundToInt()
-            try {
-                wm.updateViewLayout(box, lp)
-            } catch (e: Exception) {
-                Log.w(TAG, "move failed", e)
-            }
+            dragStartX = lp.x
+            dragStartY = lp.y
             showCloseTarget()
-            closeTarget?.isActivated = nearClose(lp)
-            closeTarget?.alpha = if (nearClose(lp)) 1f else 0.6f
         }
 
-        override fun onDragEnd(rawX: Float, rawY: Float) {
-            val lp = params
-            val close = lp != null && nearClose(lp)
+        override fun onDrag(totalDxPx: Float, totalDyPx: Float) {
+            val lp = params ?: return
+            lp.x = dragStartX + totalDxPx.roundToInt()
+            lp.y = dragStartY + totalDyPx.roundToInt()
+            clamp(lp)
+            updateLayout(lp)
+            val near = nearClose()
+            closeTarget?.alpha = if (near) 1f else 0.6f
+            closeTarget?.scaleX = if (near) 1.2f else 1f
+            closeTarget?.scaleY = if (near) 1.2f else 1f
+        }
+
+        override fun onDragEnd() {
+            val close = nearClose()
             hideCloseTarget()
             if (close) {
                 dismissed = true
                 hide()
                 return
             }
-            lp ?: return
+            val lp = params ?: return
             prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
         }
 
-        override fun onScratchStart() {
+        override fun onScratchStart(): Boolean {
+            if (!player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) || !player.isCurrentMediaItemSeekable) {
+                return false // e.g. a live stream: the record just turns under the finger
+            }
             scratchFrom = player.currentPosition
+            scratchIndex = player.currentMediaItemIndex
             scratchTarget = scratchFrom
             player.volume = 0f // the record is "held": silent while scratching
+            return true
         }
 
         override fun onScratch(totalDeg: Float) {
@@ -221,27 +266,47 @@ class FloatingRecord(
             record?.setOverlayText(formatTime(scratchTarget))
         }
 
-        override fun onScratchEnd(totalDeg: Float) {
-            scratchTarget = targetFor(totalDeg)
+        override fun onScratchEnd(totalDeg: Float, cancelled: Boolean) {
             record?.setOverlayText(null)
-            if (player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) &&
-                abs(scratchTarget - scratchFrom) > 200
-            ) {
-                player.seekTo(scratchTarget)
+            if (!cancelled) {
+                scratchTarget = targetFor(totalDeg)
+                if (abs(scratchTarget - scratchFrom) > 200 && scratchIndex < player.mediaItemCount) {
+                    // Same track even if it changed underneath while muted.
+                    player.seekTo(scratchIndex, scratchTarget)
+                }
             }
             player.volume = 1f
         }
+    }
+
+    private fun updateLayout(lp: WindowManager.LayoutParams) {
+        val box = root ?: return
+        try {
+            wm.updateViewLayout(box, lp)
+        } catch (e: Exception) {
+            Log.w(TAG, "move failed", e)
+        }
+    }
+
+    /** Keeps the whole record (and its buttons) on screen. */
+    private fun clamp(lp: WindowManager.LayoutParams) {
+        val m = ctx.resources.displayMetrics
+        val w = root?.width?.takeIf { it > 0 } ?: dp(RECORD_DP)
+        val h = root?.height?.takeIf { it > 0 } ?: dp(RECORD_DP + 36)
+        lp.x = lp.x.coerceIn(0, (m.widthPixels - w).coerceAtLeast(0))
+        lp.y = lp.y.coerceIn(0, (m.heightPixels - h).coerceAtLeast(0))
     }
 
     /** One full turn = [MS_PER_TURN]; clamped to the track. */
     private fun targetFor(totalDeg: Float): Long {
         val delta = (totalDeg / 360f * MS_PER_TURN).toLong()
         val dur = player.duration
-        val max = if (dur > 0) dur - 500 else Long.MAX_VALUE
+        val max = if (dur > 0) dur - 500 else scratchFrom + 10 * 60_000L
         return (scratchFrom + delta).coerceIn(0L, max.coerceAtLeast(0L))
     }
 
     private fun formatTime(ms: Long): String {
+        if (ms < 0) return "0:00"
         val s = ms / 1000
         return "%d:%02d".format(s / 60, s % 60)
     }
@@ -269,6 +334,7 @@ class FloatingRecord(
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = dp(48)
             flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            alpha = 0.8f // API 31+: a not-fully-opaque window lets touches below pass through
         }
         try {
             wm.addView(v, lp)
@@ -289,14 +355,16 @@ class FloatingRecord(
         closeTarget = null
     }
 
-    /** Record center within ~90 dp of the × (bottom center). */
-    private fun nearClose(lp: WindowManager.LayoutParams): Boolean {
-        val m = ctx.resources.displayMetrics
-        val recordCx = lp.x + dp(RECORD_DP) / 2f
-        val recordCy = lp.y + dp(RECORD_DP) / 2f
-        val closeCx = m.widthPixels / 2f
-        val closeCy = m.heightPixels - dp(48) - dp(CLOSE_DP) / 2f
-        return hypot(recordCx - closeCx, recordCy - closeCy) < dp(90)
+    /** Record center within ~64 dp of the ×, both measured on screen. */
+    private fun nearClose(): Boolean {
+        val rec = record ?: return false
+        val target = closeTarget ?: return false
+        if (target.width == 0) return false
+        val a = IntArray(2).also { rec.getLocationOnScreen(it) }
+        val b = IntArray(2).also { target.getLocationOnScreen(it) }
+        val dx = (a[0] + rec.width / 2f) - (b[0] + target.width / 2f)
+        val dy = (a[1] + rec.height / 2f) - (b[1] + target.height / 2f)
+        return hypot(dx, dy) < dp(64)
     }
 
     private fun loadThumb(id: String) = TrackStore(ctx.filesDir).thumbFor(id).let {

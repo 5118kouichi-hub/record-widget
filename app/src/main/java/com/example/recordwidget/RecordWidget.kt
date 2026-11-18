@@ -253,6 +253,7 @@ object RecordWidget {
             )
             views.setViewVisibility(R.id.next, View.GONE)
             views.setViewVisibility(R.id.prev, View.GONE)
+            views.setViewVisibility(R.id.title, View.VISIBLE)
         } else {
             views.setTextViewText(R.id.title, s.title ?: track?.title)
             views.setContentDescription(
@@ -264,6 +265,8 @@ object RecordWidget {
             views.setOnClickPendingIntent(R.id.prev, servicePendingIntent(ctx, PlaybackService.ACTION_PREV, RC_PREV))
             views.setViewVisibility(R.id.next, View.VISIBLE)
             views.setViewVisibility(R.id.prev, View.VISIBLE)
+            // The small record has room only for the two buttons.
+            views.setViewVisibility(R.id.title, if (layoutId == R.layout.widget_record) View.GONE else View.VISIBLE)
         }
         return views
     }

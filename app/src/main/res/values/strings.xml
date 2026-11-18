@@ -43,4 +43,5 @@
     <string name="floating_switch">浮かぶレコード（他のアプリの上に表示）</string>
     <string name="floating_hint">再生中はどのアプリの上にもレコードが浮かびます。タップで再生／一時停止、盤をぐるっと回すと早送り（時計回り）・巻き戻し（反時計回り）、真ん中をつまんで移動、下の×まで運ぶと閉じます。</string>
     <string name="floating_need_permission">次の画面で「レコードウィジェット」の「他のアプリの上に重ねて表示」をオンにしてください</string>
+    <string name="floating_not_supported">この端末では「他のアプリの上に重ねて表示」を設定できません</string>
 </resources>
