@@ -172,4 +172,29 @@ class TrackStoreTest {
         assertEquals("more garbage", File(root, "tracks.json.bak").readText())
         assertEquals(listOf(t(2)), TrackStore(root).all())
     }
+
+    @Test
+    fun roundTripsWebTrackAndKeepsOldEntriesWithoutUrl() {
+        val root = tmp.newFolder()
+        val web = Track("w", "ネットの音声", "", "https://example.com/a.mp3?x=1&y=\"2\"")
+        val s = TrackStore(root)
+        s.add(t(1))
+        s.add(web)
+        assertEquals(listOf(t(1), web), TrackStore(root).all())
+        assertEquals(null, TrackStore(root).all()[0].url)
+    }
+
+    @Test
+    fun removingWebTrackKeepsTracksDirAndDeletesThumb() {
+        val root = tmp.newFolder()
+        val s = TrackStore(root)
+        s.add(t(1))
+        s.fileFor(t(1)).apply { parentFile!!.mkdirs(); writeText("a") }
+        val web = Track("w", "web", "", "https://example.com/a.mp3")
+        s.add(web)
+        s.thumbFor("w").apply { parentFile!!.mkdirs(); writeText("png") }
+        s.remove("w")
+        assertTrue(s.fileFor(t(1)).isFile)
+        assertFalse(s.thumbFor("w").exists())
+    }
 }

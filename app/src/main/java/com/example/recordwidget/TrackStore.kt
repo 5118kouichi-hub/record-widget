@@ -2,7 +2,18 @@ package com.example.recordwidget
 
 import java.io.File
 
-data class Track(val id: String, val title: String, val fileName: String)
+/**
+ * One saved sound. A local track has its audio in `tracks/<fileName>`; a web track has
+ * [url] set (streamed, nothing stored) and an empty [fileName].
+ */
+data class Track(
+    val id: String,
+    val title: String,
+    val fileName: String,
+    val url: String? = null,
+) {
+    val isRemote: Boolean get() = url != null
+}
 
 /**
  * Persists the track list in `root/tracks.json`; audio files live in `root/tracks/`.
@@ -17,6 +28,9 @@ class TrackStore(private val root: File) {
     fun all(): List<Track> = synchronized(LOCK) { load() }
 
     fun fileFor(t: Track): File = File(root, "tracks/" + t.fileName)
+
+    /** Round thumbnail shown in the middle of the widget's record (may not exist). */
+    fun thumbFor(id: String): File = File(root, "thumbs/$id.png")
 
     fun add(t: Track) {
         synchronized(LOCK) {
@@ -44,7 +58,8 @@ class TrackStore(private val root: File) {
             if (i < 0) return@synchronized null
             val removed = list.removeAt(i)
             save(list) // persist first; if this throws the audio file is kept
-            fileFor(removed).delete()
+            if (!removed.isRemote) fileFor(removed).delete()
+            thumbFor(removed.id).delete()
             removed
         }
     }
@@ -97,7 +112,8 @@ class TrackStore(private val root: File) {
                 sb.append("{\"id\":").append(quote(t.id))
                     .append(",\"title\":").append(quote(t.title))
                     .append(",\"fileName\":").append(quote(t.fileName))
-                    .append('}')
+                if (t.url != null) sb.append(",\"url\":").append(quote(t.url))
+                sb.append('}')
             }
             return sb.append(']').toString()
         }
@@ -170,6 +186,7 @@ class TrackStore(private val root: File) {
                     m["id"] ?: fail(),
                     m["title"] ?: fail(),
                     m["fileName"] ?: fail(),
+                    m["url"],
                 )
             }
 

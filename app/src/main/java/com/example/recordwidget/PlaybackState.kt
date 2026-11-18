@@ -15,7 +15,8 @@ object PlaybackState {
     private const val KEY_POS = "lastPositionMs"
 
     /**
-     * The single "has a playable file" predicate: tracks in list order whose audio file exists.
+     * The single "playable" predicate: tracks in list order that are web tracks or whose audio
+     * file exists.
      * The widget's empty state and the service's queue both use this, so they always agree.
      */
     fun playableTracks(ctx: Context): List<Track> {
@@ -26,7 +27,7 @@ object PlaybackState {
             Log.w(TAG, "cannot read track list", e)
             emptyList()
         }
-        return all.filter { store.fileFor(it).isFile }
+        return all.filter { it.isRemote || store.fileFor(it).isFile }
     }
 
     fun saveResume(ctx: Context, mediaId: String?, positionMs: Long) {
@@ -42,9 +43,11 @@ object PlaybackState {
     fun resumePositionMs(ctx: Context): Long =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_POS, 0L)
 
-    /** Title of the track playback will resume with; the first track if nothing (valid) is saved. */
-    fun resumeTitle(ctx: Context, tracks: List<Track>): String? {
+    /** The track playback will resume with; the first track if nothing (valid) is saved. */
+    fun resumeTrack(ctx: Context, tracks: List<Track>): Track? {
         val id = resumeId(ctx)
-        return (tracks.firstOrNull { it.id == id } ?: tracks.firstOrNull())?.title
+        return tracks.firstOrNull { it.id == id } ?: tracks.firstOrNull()
     }
+
+    fun resumeTitle(ctx: Context, tracks: List<Track>): String? = resumeTrack(ctx, tracks)?.title
 }

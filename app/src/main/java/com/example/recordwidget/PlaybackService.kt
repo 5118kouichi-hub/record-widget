@@ -58,7 +58,11 @@ class PlaybackService : MediaSessionService() {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) consecutiveErrors = 0
+            updateWidget()
         }
+
+        // The record keeps turning while a web track buffers: it follows "wants to play".
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = updateWidget()
 
         override fun onPlayerError(error: PlaybackException) {
             Log.w(TAG, "playback error", error)
@@ -286,7 +290,7 @@ class PlaybackService : MediaSessionService() {
         PlaybackState.playableTracks(this).map { t ->
             MediaItem.Builder()
                 .setMediaId(t.id)
-                .setUri(Uri.fromFile(TrackStore(filesDir).fileFor(t)))
+                .setUri(t.url?.let(Uri::parse) ?: Uri.fromFile(TrackStore(filesDir).fileFor(t)))
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).build())
                 .build()
         }
@@ -305,7 +309,8 @@ class PlaybackService : MediaSessionService() {
 
     private fun currentTitle(): String? = player.currentMediaItem?.mediaMetadata?.title?.toString()
 
-    private fun updateWidget() = RecordWidget.update(this, player.isPlaying, currentTitle())
+    private fun updateWidget() =
+        RecordWidget.update(this, isActive(), currentTitle(), player.currentMediaItem?.mediaId)
 
     /**
      * A getForegroundService() start must reach startForeground() within 5 s. If Media3 already

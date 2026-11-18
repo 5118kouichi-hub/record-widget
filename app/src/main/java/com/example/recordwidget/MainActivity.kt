@@ -11,6 +11,7 @@ import android.provider.OpenableColumns
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
@@ -30,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var store: TrackStore
     private lateinit var adapter: TrackAdapter
     private lateinit var addButton: Button
+    private lateinit var addUrlButton: Button
     private lateinit var progressText: TextView
     private lateinit var emptyText: TextView
     private lateinit var list: RecyclerView
@@ -53,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         store = TrackStore(filesDir)
 
         addButton = findViewById(R.id.addButton)
+        addUrlButton = findViewById(R.id.addUrlButton)
         progressText = findViewById(R.id.progressText)
         emptyText = findViewById(R.id.emptyText)
         list = findViewById(R.id.trackList)
@@ -64,6 +67,7 @@ class MainActivity : AppCompatActivity() {
         addButton.setOnClickListener {
             pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
         }
+        addUrlButton.setOnClickListener { askUrl(null) }
 
         refresh()
         requestNotificationPermissionOnce()
@@ -96,6 +100,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleSendIntent(i: Intent?) {
         if (i == null || i.action != Intent.ACTION_SEND) return
+        if (i.type == "text/plain") {
+            val text = i.getStringExtra(Intent.EXTRA_TEXT)
+            i.action = null
+            i.removeExtra(Intent.EXTRA_TEXT)
+            askUrl(WebLinks.firstUrl(text) ?: text?.trim())
+            return
+        }
         if (i.type?.startsWith("video/") != true) return
         val uri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
             i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -134,10 +145,12 @@ class MainActivity : AppCompatActivity() {
                 ?: app.getString(R.string.default_track_title, localStore.all().size + 1)
             message = when (val r = extractAudio(app, uri, out)) {
                 is ExtractResult.Ok -> {
+                    Thumbnails.fromVideo(app, uri, localStore.thumbFor(id)) // optional
                     try {
                         localStore.add(Track(id, title, fileName))
                     } catch (e: IOException) {
                         out.delete()
+                        localStore.thumbFor(id).delete()
                         throw e
                     }
                     PlaybackService.reload(app)
@@ -146,6 +159,82 @@ class MainActivity : AppCompatActivity() {
                 ExtractResult.NoAudio -> app.getString(R.string.no_audio)
                 is ExtractResult.Unsupported -> app.getString(R.string.unsupported_format, r.mime)
                 is ExtractResult.Failed -> app.getString(R.string.extract_failed, r.msg)
+            }
+        } catch (e: Exception) {
+            message = app.getString(R.string.extract_failed, e.message ?: e.javaClass.simpleName)
+        }
+        runOnUiThread {
+            finishOne()
+            toast(message)
+        }
+    }
+
+    /** Asks for a web link (prefilled when shared from another app). */
+    private fun askUrl(prefill: String?) {
+        val builder = AlertDialog.Builder(this)
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val urlEdit = EditText(builder.context).apply {
+            hint = getString(R.string.url_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+            if (prefill != null) setText(prefill)
+        }
+        val titleEdit = EditText(builder.context).apply {
+            hint = getString(R.string.url_title_hint)
+            setSingleLine()
+        }
+        val box = LinearLayout(builder.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(urlEdit)
+            addView(titleEdit)
+        }
+        builder
+            .setTitle(R.string.url_dialog_title)
+            .setMessage(R.string.url_dialog_note)
+            .setView(box)
+            .setPositiveButton(R.string.add) { _, _ ->
+                startUrlImport(urlEdit.text.toString().trim(), titleEdit.text.toString().trim())
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun startUrlImport(url: String, title: String) {
+        when (WebLinks.check(url)) {
+            WebLinks.Check.INVALID -> return toast(getString(R.string.url_invalid))
+            WebLinks.Check.UNSUPPORTED_SITE -> return toast(getString(R.string.url_unsupported_site))
+            WebLinks.Check.OK -> {}
+        }
+        pendingImports++
+        updateBusy()
+        val app = applicationContext
+        try {
+            executor.execute { runUrlImport(app, url, title) }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            pendingImports--
+            updateBusy()
+        }
+    }
+
+    /** Background thread: checks the link can be read, saves it, then makes a thumbnail. */
+    private fun runUrlImport(app: Context, url: String, typedTitle: String) {
+        var message: String
+        try {
+            val probe = WebLinks.probe(url)
+            message = if (probe == null) {
+                app.getString(R.string.url_unreadable)
+            } else {
+                val id = UUID.randomUUID().toString()
+                val localStore = TrackStore(app.filesDir)
+                val title = typedTitle.ifEmpty { null } ?: probe.title ?: WebLinks.nameFromUrl(url)
+                    ?: app.getString(R.string.default_web_title, localStore.all().size + 1)
+                localStore.add(Track(id, title, "", url))
+                PlaybackService.reload(app)
+                if (probe.hasVideo && Thumbnails.fromUrl(url, localStore.thumbFor(id))) {
+                    RecordWidget.refresh(app)
+                }
+                app.getString(R.string.added)
             }
         } catch (e: Exception) {
             message = app.getString(R.string.extract_failed, e.message ?: e.javaClass.simpleName)
@@ -165,6 +254,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateBusy() {
         val busy = pendingImports > 0
         addButton.isEnabled = !busy
+        addUrlButton.isEnabled = !busy
         progressText.visibility = if (busy) View.VISIBLE else View.GONE
     }
 

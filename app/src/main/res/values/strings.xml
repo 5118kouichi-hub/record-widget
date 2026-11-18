@@ -27,4 +27,14 @@
     <string name="cancel">キャンセル</string>
     <string name="storage_error">保存に失敗しました: %1$s</string>
     <string name="default_track_title">音声 %1$d</string>
+    <string name="add_from_url">URLから追加</string>
+    <string name="add">追加</string>
+    <string name="url_dialog_title">ネットの音声を追加</string>
+    <string name="url_dialog_note">音声・動画ファイル（.mp3 .m4a .mp4 など）への直接のリンクが使えます。YouTubeやTikTokなどのページのリンクは再生できません。再生にはネット接続が必要です。</string>
+    <string name="url_hint">https://…</string>
+    <string name="url_title_hint">名前（空欄なら自動）</string>
+    <string name="url_invalid">http:// か https:// で始まるリンクを入れてください</string>
+    <string name="url_unsupported_site">このサイトのリンクは再生できません（音声ファイルへの直接のリンクが必要です）</string>
+    <string name="url_unreadable">このリンクは音声として読み込めませんでした</string>
+    <string name="default_web_title">ネットの音声 %1$d</string>
 </resources>
