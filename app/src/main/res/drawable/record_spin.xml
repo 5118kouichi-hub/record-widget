@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Driven by an indeterminate ProgressBar: the launcher animates the level 0..10000,
+     so the record turns smoothly without the app redrawing the widget.
+     Pivot = disc center (44,56) in record_disc's 100x100 viewport. -->
+<rotate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/record_disc"
+    android:fromDegrees="0"
+    android:pivotX="44%"
+    android:pivotY="56%"
+    android:toDegrees="360" />

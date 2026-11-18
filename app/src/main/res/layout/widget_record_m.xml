@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent widget: only the record, its title and the next button are drawn.
+     Disc 130dp; RecordWidget picks small/medium/large by widget size on Android 12+. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <include
+        android:id="@+id/disc_area"
+        layout="@layout/widget_disc"
+        android:layout_width="130dp"
+        android:layout_height="130dp" />
+
+    <include
+        layout="@layout/widget_title_row"
+        android:layout_width="130dp"
+        android:layout_height="wrap_content" />
+</LinearLayout>

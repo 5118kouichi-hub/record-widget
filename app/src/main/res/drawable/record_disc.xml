@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Record seen from above. Disc center (44,56) r=42; viewport shared with tonearm_*.xml. -->
+<!-- Record seen from above (rotating layer; sheen is static in record_sheen.xml). Disc center (44,56) r=42; viewport shared with tonearm_*.xml. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="100dp"
     android:height="100dp"
@@ -26,12 +26,6 @@
         android:pathData="M24,56a20,20 0,1 0,40 0a20,20 0,1 0,-40 0z"
         android:strokeWidth="0.6"
         android:strokeColor="#FF2C2C2C" />
-    <!-- sheen -->
-    <path
-        android:pathData="M17,29a38,38 0,0 1,27 -11"
-        android:strokeLineCap="round"
-        android:strokeWidth="1.2"
-        android:strokeColor="#40FFFFFF" />
     <!-- center label -->
     <path
         android:fillColor="#FFE64A19"
@@ -40,6 +34,13 @@
         android:pathData="M34,56a10,10 0,1 0,20 0a10,10 0,1 0,-20 0z"
         android:strokeWidth="0.6"
         android:strokeColor="#FFFFAB91" />
+    <!-- printed label lines: asymmetric so the spin is visible -->
+    <path
+        android:fillColor="#FFFFE0B2"
+        android:pathData="M36,49h16v2.2h-16z" />
+    <path
+        android:fillColor="#FFFFE0B2"
+        android:pathData="M38,61h9v1.6h-9z" />
     <!-- spindle hole -->
     <path
         android:fillColor="#FFEEEEEE"

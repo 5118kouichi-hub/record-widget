@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
 
@@ -50,9 +52,38 @@ object RecordWidget {
     fun mainActivityIntent(ctx: Context): Intent =
         Intent().setClassName(ctx, MAIN_ACTIVITY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    /**
+     * Android 12+: the launcher picks the small/medium/large record by the widget's size
+     * (the disc box must be a fixed square so the spinning record is never squashed).
+     * Older versions always get the small one.
+     */
     internal fun buildViews(ctx: Context, playing: Boolean, title: String?): RemoteViews {
         val tracks = PlaybackState.playableTracks(ctx)
-        val views = RemoteViews(ctx.packageName, R.layout.widget_record)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return buildLayout(ctx, R.layout.widget_record, tracks, playing, title)
+        }
+        return RemoteViews(
+            mapOf(
+                SizeF(110f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, playing, title),
+                SizeF(140f, 170f) to buildLayout(ctx, R.layout.widget_record_m, tracks, playing, title),
+                SizeF(200f, 230f) to buildLayout(ctx, R.layout.widget_record_l, tracks, playing, title),
+            ),
+        )
+    }
+
+    private fun buildLayout(
+        ctx: Context,
+        layoutId: Int,
+        tracks: List<Track>,
+        playing: Boolean,
+        title: String?,
+    ): RemoteViews {
+        val views = RemoteViews(ctx.packageName, layoutId)
+        // Playing: show the turning record (indeterminate ProgressBar, animated by the
+        // launcher itself); otherwise the still one.
+        val spinning = playing && tracks.isNotEmpty()
+        views.setViewVisibility(R.id.disc_spin, if (spinning) View.VISIBLE else View.GONE)
+        views.setViewVisibility(R.id.disc, if (spinning) View.GONE else View.VISIBLE)
         val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
         if (tracks.isEmpty()) {
