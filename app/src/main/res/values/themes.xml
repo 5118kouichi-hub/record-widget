@@ -1,11 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.RecordWidget" parent="Theme.AppCompat">
-        <item name="colorPrimary">@color/shop_surface</item>
-        <item name="colorPrimaryDark">@color/shop_bg</item>
-        <item name="colorAccent">@color/shop_accent</item>
-        <item name="android:windowBackground">@color/shop_bg</item>
-        <item name="android:textColorPrimary">@color/shop_text</item>
-        <item name="android:textColorSecondary">@color/shop_text_sub</item>
+    <!-- Base: used by overlay views (ContextThemeWrapper) and as the manifest theme. -->
+    <style name="Theme.RecordWidget" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/oneui_accent</item>
+        <item name="colorPrimaryDark">@color/oneui_bg</item>
+        <item name="colorAccent">@color/oneui_accent</item>
+        <item name="android:windowBackground">@color/oneui_bg</item>
+        <item name="android:textColorPrimary">@color/oneui_text</item>
+        <item name="android:textColorSecondary">@color/oneui_sub</item>
+    </style>
+
+    <!-- Galaxy One UI-like (default). -->
+    <style name="Theme.RecordWidget.OneUI" parent="Theme.RecordWidget">
+        <item name="alertDialogTheme">@style/ThemeOverlay.RecordWidget.Dialog.OneUI</item>
+    </style>
+
+    <style name="ThemeOverlay.RecordWidget.Dialog.OneUI" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_bg_oneui</item>
+        <item name="colorAccent">@color/oneui_accent</item>
+        <item name="android:textColorPrimary">@color/oneui_text</item>
+        <item name="android:textColorSecondary">@color/oneui_sub</item>
+    </style>
+
+    <!-- iPhone iOS-like. -->
+    <style name="Theme.RecordWidget.IOS" parent="Theme.RecordWidget">
+        <item name="colorPrimary">@color/ios_accent</item>
+        <item name="colorPrimaryDark">@color/ios_bg</item>
+        <item name="colorAccent">@color/ios_accent</item>
+        <item name="android:windowBackground">@color/ios_bg</item>
+        <item name="android:textColorPrimary">@color/ios_text</item>
+        <item name="android:textColorSecondary">@color/ios_sub</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.RecordWidget.Dialog.IOS</item>
+    </style>
+
+    <style name="ThemeOverlay.RecordWidget.Dialog.IOS" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_bg_ios</item>
+        <item name="colorAccent">@color/ios_accent</item>
+        <item name="android:textColorPrimary">@color/ios_text</item>
+        <item name="android:textColorSecondary">@color/ios_sub</item>
     </style>
 </resources>

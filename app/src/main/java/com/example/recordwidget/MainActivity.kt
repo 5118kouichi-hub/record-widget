@@ -9,20 +9,14 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.view.View
-import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -31,13 +25,7 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     private lateinit var store: TrackStore
-    private lateinit var adapter: TrackAdapter
-    private lateinit var addButton: Button
-    private lateinit var addUrlButton: Button
-    private lateinit var floatingSwitch: SwitchCompat
-    private lateinit var progressText: TextView
-    private lateinit var emptyText: TextView
-    private lateinit var list: RecyclerView
+    private lateinit var screen: MainScreen
 
     private val executor = Executors.newSingleThreadExecutor()
     private var pendingImports = 0 // main thread only
@@ -53,26 +41,29 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(UiStyle.themeRes(this)) // One UI-like (default) or iOS-like
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
         store = TrackStore(filesDir)
 
-        addButton = findViewById(R.id.addButton)
-        addUrlButton = findViewById(R.id.addUrlButton)
-        floatingSwitch = findViewById(R.id.floatingSwitch)
-        floatingSwitch.setOnCheckedChangeListener { _, on -> if (!syncingSwitch) onFloatingSwitch(on) }
-        progressText = findViewById(R.id.progressText)
-        emptyText = findViewById(R.id.emptyText)
-        list = findViewById(R.id.trackList)
-
-        adapter = TrackAdapter(::confirmRename, ::confirmDelete, ::moveTrack)
-        list.layoutManager = LinearLayoutManager(this)
-        list.adapter = adapter
-
-        addButton.setOnClickListener {
-            pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-        }
-        addUrlButton.setOnClickListener { askUrl(null) }
+        screen = MainScreen(
+            this,
+            UiStyle.current(this),
+            object : MainScreen.Callbacks {
+                override fun onAddVideo() =
+                    pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                override fun onAddUrl() = askUrl(null)
+                override fun onFloatingSwitch(on: Boolean) = this@MainActivity.onFloatingSwitch(on)
+                override fun onStyle(kind: UiKind) {
+                    UiStyle.setKind(this@MainActivity, kind)
+                    recreate()
+                }
+                override fun onRename(t: Track) = confirmRename(t)
+                override fun onDelete(t: Track) = confirmDelete(t)
+                override fun onMove(from: Int, to: Int) = moveTrack(from, to)
+            },
+        )
+        screen.install()
+        updateBusy()
 
         refresh()
         requestNotificationPermissionOnce()
@@ -174,14 +165,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var syncingSwitch = false
-
     override fun onResume() {
         super.onResume()
         // Back from the permission screen (or the permission was revoked meanwhile).
-        syncingSwitch = true
-        floatingSwitch.isChecked = FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this)
-        syncingSwitch = false
+        screen.setFloatingChecked(FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this))
         PlaybackService.floatingChanged(this)
         refresh() // the order may have changed from the floating record's list
     }
@@ -293,10 +280,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBusy() {
-        val busy = pendingImports > 0
-        addButton.isEnabled = !busy
-        addUrlButton.isEnabled = !busy
-        progressText.visibility = if (busy) View.VISIBLE else View.GONE
+        screen.setBusy(pendingImports > 0)
     }
 
     private fun displayTitle(ctx: Context, uri: Uri): String? {
@@ -316,8 +300,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             emptyList()
         }
-        adapter.submit(tracks)
-        emptyText.visibility = if (tracks.isEmpty()) View.VISIBLE else View.GONE
+        screen.showTracks(tracks)
     }
 
     private fun changed() {

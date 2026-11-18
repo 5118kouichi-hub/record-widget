@@ -65,4 +65,14 @@
     <string name="cd_delete_order">この順番を削除</string>
     <string name="cd_looping">くり返し再生中</string>
     <string name="cd_drag">ドラッグで並べ替え</string>
+    <string name="header_title">レコードウィジェット</string>
+    <string name="header_count">%1$d件の音声</string>
+    <string name="section_add">追加</string>
+    <string name="section_floating">浮かぶレコード</string>
+    <string name="section_tracks">音声</string>
+    <string name="section_design">デザイン</string>
+    <string name="floating_switch_short">他のアプリの上に表示</string>
+    <string name="style_oneui">Galaxy（One UI）風</string>
+    <string name="style_ios">iPhone（iOS）風</string>
+    <string name="style_footer">アプリの画面と、浮かぶレコードを長押しして開く一覧の見た目が変わります。明るさは端末のダークモード設定に合わせます。</string>
 </resources>

@@ -53,6 +53,9 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     }
 
     private val ctx: Context = ContextThemeWrapper(ctx.applicationContext, R.style.Theme_RecordWidget)
+
+    /** Look picked in the app (One UI-like / iOS-like) and light/dark; re-read on every opening. */
+    private var st: UiStyle = UiStyle.current(this.ctx)
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val density = ctx.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).roundToInt()
@@ -73,6 +76,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
 
     fun show() {
         if (root != null) return
+        st = UiStyle.current(ctx)
         val scrim = object : FrameLayout(ctx) {
             override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                 if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
@@ -101,8 +105,8 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         val card = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(COLOR_CARD)
+                cornerRadius = dp(if (st.isIos) 14 else 26).toFloat()
+                setColor(st.card)
             }
             setPadding(dp(16), dp(12), dp(16), dp(12))
             isClickable = true // keeps taps on the card from closing it
@@ -117,6 +121,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             addView(
                 ImageButton(ctx).apply {
                     setImageResource(R.drawable.ic_close)
+                    imageTintList = android.content.res.ColorStateList.valueOf(st.text)
                     background = null
                     contentDescription = ctx.getString(R.string.cd_close_panel)
                     setOnClickListener { hide() }
@@ -127,7 +132,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         body = FrameLayout(ctx)
         // Feedback inside the card: toasts would appear behind this overlay.
         status = text(0, 13f).apply {
-            setTextColor(COLOR_ACCENT)
+            setTextColor(st.accent)
             visibility = View.GONE
         }
         card.addView(header)
@@ -227,8 +232,8 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             setSelectAllOnFocus(true)
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_DONE
-            setTextColor(COLOR_TEXT)
-            backgroundTintList = android.content.res.ColorStateList.valueOf(COLOR_ACCENT)
+            setTextColor(st.text)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(st.accent)
         }
         val save = {
             val name = edit.text.toString().trim().ifEmpty { ctx.getString(R.string.panel_default_name, 1) }
@@ -286,6 +291,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         val count = text(0, 12f, sub = true).apply { text = ctx.getString(R.string.panel_count, o.trackIds.size) }
         val del = ImageButton(ctx).apply {
             setImageResource(R.drawable.ic_delete)
+            imageTintList = android.content.res.ColorStateList.valueOf(st.danger)
             background = null
             contentDescription = ctx.getString(R.string.cd_delete_order)
         }
@@ -306,7 +312,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
                 // Two taps: the first one only warns, so a stray tap never deletes.
                 armedDelete = true
                 count.text = ctx.getString(R.string.panel_tap_again_to_delete)
-                count.setTextColor(COLOR_ACCENT)
+                count.setTextColor(st.accent)
             } else {
                 SavedOrders.delete(ctx, o.id)
                 showSaved()
@@ -344,10 +350,12 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             }
             val loop = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_repeat_one)
+                imageTintList = android.content.res.ColorStateList.valueOf(st.accent)
                 contentDescription = ctx.getString(R.string.cd_looping)
             }
             val handle = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_drag)
+                imageTintList = android.content.res.ColorStateList.valueOf(st.sub)
                 contentDescription = ctx.getString(R.string.cd_drag)
                 val p = dp(10)
                 setPadding(p, p, p, p)
@@ -392,7 +400,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             val t = items[position]
             h.title.text = t.title
             val current = t.id == actions.currentId()
-            h.title.setTextColor(if (current) COLOR_ACCENT else COLOR_TEXT)
+            h.title.setTextColor(if (current) st.accent else st.text)
             h.title.setTypeface(null, if (current) Typeface.BOLD else Typeface.NORMAL)
             h.loop.visibility = if (t.id == actions.loopingId()) View.VISIBLE else View.GONE
             val bmp = if (thumbs.containsKey(t.id)) {
@@ -450,7 +458,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     private fun text(res: Int, sizeSp: Float, bold: Boolean = false, sub: Boolean = false) = TextView(ctx).apply {
         if (res != 0) setText(res)
         textSize = sizeSp
-        setTextColor(if (sub) COLOR_SUB else COLOR_TEXT)
+        setTextColor(if (sub) st.sub else st.text)
         if (bold) setTypeface(null, Typeface.BOLD)
         setPadding(0, dp(4), 0, dp(4))
     }
@@ -458,10 +466,11 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     private fun button(res: Int, primary: Boolean = false, onClick: () -> Unit) = Button(ctx).apply {
         setText(res)
         isAllCaps = false
-        setTextColor(COLOR_TEXT)
+        // Filled accent for the main action; tinted grey for the other (both systems do this).
+        setTextColor(if (primary) 0xFFFFFFFF.toInt() else st.accent)
         background = GradientDrawable().apply {
-            cornerRadius = dp(22).toFloat()
-            setColor(if (primary) COLOR_ACCENT else COLOR_SURFACE)
+            cornerRadius = dp(if (st.isIos) 12 else 22).toFloat()
+            setColor(if (primary) st.accent else if (st.dark) 0xFF2C2C2E.toInt() else 0xFFE9E9EB.toInt())
         }
         minHeight = dp(44)
         setOnClickListener { onClick() }
@@ -494,10 +503,5 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     companion object {
         private const val TAG = "TrackListPanel"
         private const val ROW_DP = 56
-        private const val COLOR_CARD = 0xF21B1512.toInt()
-        private const val COLOR_SURFACE = 0xFF3A2E27.toInt()
-        private const val COLOR_TEXT = 0xFFF3E6D8.toInt()
-        private const val COLOR_SUB = 0xFFB8A593.toInt()
-        private const val COLOR_ACCENT = 0xFFE64A19.toInt()
     }
 }

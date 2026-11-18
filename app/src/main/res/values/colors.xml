@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="shop_bg">#FF1B1512</color>
-    <color name="shop_surface">#FF2A211C</color>
-    <color name="shop_accent">#FFE64A19</color>
-    <color name="shop_accent_dark">#FFB33A12</color>
-    <color name="shop_text">#FFF3E6D8</color>
-    <color name="shop_text_sub">#FFB8A593</color>
-</resources>
