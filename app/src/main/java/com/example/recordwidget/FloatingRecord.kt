@@ -54,7 +54,7 @@ class FloatingRecord(
     private var closeTarget: View? = null
     private var thumbId: String? = null
 
-    private val panel = TrackListPanel(
+    private val panel: TrackListPanel = TrackListPanel(
         ctx,
         object : TrackListPanel.Actions {
             override fun currentId() = player.currentMediaItem?.mediaId
@@ -75,7 +75,9 @@ class FloatingRecord(
     private var allowed = readAllowed()
     private var releasing = false
 
-    private fun refreshPanel() = panel.refresh()
+    private fun refreshPanel() {
+        panel.refresh()
+    }
 
     private fun readAllowed() = isEnabled(ctx) && Settings.canDrawOverlays(ctx)
 
