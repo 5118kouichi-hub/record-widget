@@ -7,6 +7,17 @@ android {
     namespace = "com.example.recordwidget"
     compileSdk = 35
 
+    // Fixed debug key (committed on purpose) so every CI build can be installed over the
+    // previous one without uninstalling. Debug-only; not for store releases.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.recordwidget"
         minSdk = 26
