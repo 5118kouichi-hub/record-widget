@@ -60,10 +60,32 @@ class MainActivity : AppCompatActivity() {
                 override fun onRename(t: Track) = confirmRename(t)
                 override fun onDelete(t: Track) = confirmDelete(t)
                 override fun onMove(from: Int, to: Int) = moveTrack(from, to)
+                override fun isFavorite(t: Track) = PlaybackState.isFavorite(this@MainActivity, t.id)
+                override fun onFavorite(t: Track) {
+                    PlaybackState.setFavorite(this@MainActivity, t.id, !isFavorite(t))
+                    changed() // list + playing queue ("favorites only")
+                }
+                override fun autoUpdateOn() = Updater.autoEnabled(this@MainActivity)
+                override fun onAutoUpdate(on: Boolean) = Updater.setAuto(this@MainActivity, on)
+                override fun onCheckUpdate() {
+                    screen.setUpdateStatus(getString(R.string.update_checking))
+                    Updater.check(
+                        this@MainActivity,
+                        manual = true,
+                        onStatus = { msg -> runOnUiThread { if (!isDestroyed) screen.setUpdateStatus(msg) } },
+                    )
+                }
             },
         )
         screen.install()
         updateBusy()
+        screen.setUpdateStatus(
+            getString(R.string.update_current, Updater.currentBuild(this)) + "\n" +
+                (Updater.status(this)?.let { it + "\n" } ?: "") + getString(R.string.update_footer),
+        )
+        Updater.schedule(this)
+        // Opening the app is also a good moment to look for a new version.
+        if (Updater.autoEnabled(this) && savedInstanceState == null) Updater.check(this, manual = false)
 
         refresh()
         requestNotificationPermissionOnce()

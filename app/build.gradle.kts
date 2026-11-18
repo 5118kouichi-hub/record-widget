@@ -22,8 +22,10 @@ android {
         applicationId = "com.example.recordwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI build number = release tag "build-N"; the in-app updater compares against it.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "build-$build"
     }
 
     compileOptions {

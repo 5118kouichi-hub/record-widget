@@ -43,6 +43,14 @@ class PlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private lateinit var floating: FloatingRecord
 
+    /** The set of tracks to play changed (favorites): rebuild in place, keep the current one. */
+    private fun requeue() {
+        if (player.mediaItemCount > 0 && !rebuildQueue()) {
+            player.pause()
+        }
+        RecordWidget.refresh(this)
+    }
+
     /** Track repeated on its own (REPEAT_MODE_ONE), chosen in the floating record's list. */
     private var loopingId: String? = null
 
@@ -150,6 +158,7 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player.repeatMode = Player.REPEAT_MODE_ALL
+        player.volume = PlaybackState.volume(this)
         player.addListener(listener)
         floating = FloatingRecord(this, player, floatingActions)
 
@@ -212,6 +221,22 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun loopingId(): String? = loopingId
+
+        override fun setVolume(v: Float) {
+            PlaybackState.setVolume(this@PlaybackService, v)
+            player.volume = PlaybackState.volume(this@PlaybackService)
+        }
+
+        override fun toggleFavorite(id: String) {
+            val ctx = this@PlaybackService
+            PlaybackState.setFavorite(ctx, id, !PlaybackState.isFavorite(ctx, id))
+            if (PlaybackState.favoritesOnly(ctx)) requeue()
+        }
+
+        override fun setFavoritesOnly(on: Boolean) {
+            PlaybackState.setFavoritesOnly(this@PlaybackService, on)
+            requeue()
+        }
 
         override fun reorder(ids: List<String>, visibleOnly: Boolean) {
             try {
@@ -451,7 +476,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun loadQueue(): List<MediaItem> =
-        PlaybackState.playableTracks(this).map { t ->
+        PlaybackState.queueTracks(this).map { t ->
             MediaItem.Builder()
                 .setMediaId(t.id)
                 .setUri(if (t.isRemote) Uri.parse(t.url) else Uri.fromFile(TrackStore(filesDir).fileFor(t)))

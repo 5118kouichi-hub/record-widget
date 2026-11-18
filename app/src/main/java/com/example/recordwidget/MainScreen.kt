@@ -43,6 +43,11 @@ class MainScreen(
         fun onRename(t: Track)
         fun onDelete(t: Track)
         fun onMove(from: Int, to: Int)
+        fun onFavorite(t: Track)
+        fun isFavorite(t: Track): Boolean
+        fun onAutoUpdate(on: Boolean)
+        fun autoUpdateOn(): Boolean
+        fun onCheckUpdate()
     }
 
     private val density = activity.resources.displayMetrics.density
@@ -110,6 +115,23 @@ class MainScreen(
         )
         content.addView(footer(R.string.style_footer))
 
+        content.addView(caption(R.string.section_update))
+        val updateSwitch = SwitchCompat(activity).apply {
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            trackTintList = ColorStateList(states, intArrayOf(s.switchOn, s.separator))
+            thumbTintList = ColorStateList(states, intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()))
+            isChecked = callbacks.autoUpdateOn()
+            setOnCheckedChangeListener { _, on -> callbacks.onAutoUpdate(on) }
+        }
+        updateStatus = footer(0)
+        content.addView(
+            group(
+                switchRow(R.drawable.ic_update, R.string.update_auto, updateSwitch),
+                actionRow(R.drawable.ic_update, R.string.update_check_now) { callbacks.onCheckUpdate() },
+            ),
+        )
+        content.addView(updateStatus)
+
         val scroll = ScrollView(activity).apply {
             setBackgroundColor(s.bg)
             isFillViewport = true
@@ -125,6 +147,12 @@ class MainScreen(
     }
 
     private var syncing = false
+    private lateinit var updateStatus: TextView
+
+    /** Line under the update section: current version / progress / result. */
+    fun setUpdateStatus(text: String) {
+        updateStatus.text = text
+    }
 
     fun setFloatingChecked(on: Boolean) {
         syncing = true
@@ -210,7 +238,7 @@ class MainScreen(
         setPadding(dp(side), dp(if (s.isIos) 22 else 20), dp(side), dp(6))
     }
 
-    private fun footer(res: Int): TextView = text(activity.getString(res), 13f, s.sub).apply {
+    private fun footer(res: Int): TextView = text(if (res == 0) "" else activity.getString(res), 13f, s.sub).apply {
         val side = if (s.isIos) s.groupMarginDp + 16 else s.groupMarginDp + 20
         setPadding(dp(side), dp(6), dp(side), 0)
     }
@@ -333,6 +361,15 @@ class MainScreen(
             contentDescription = activity.getString(R.string.rename_title) + " " + t.title
         }
         addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val fav = callbacks.isFavorite(t)
+        addView(
+            smallButton(
+                if (fav) R.drawable.ic_star else R.drawable.ic_star_border,
+                if (fav) R.string.cd_fav_remove else R.string.cd_fav_add,
+                if (fav) 0xFFFFB300.toInt() else s.sub,
+                true,
+            ) { callbacks.onFavorite(t) },
+        )
         addView(smallButton(R.drawable.ic_up, R.string.move_up, s.sub, index > 0) { callbacks.onMove(index, index - 1) })
         addView(smallButton(R.drawable.ic_down, R.string.move_down, s.sub, index < count - 1) { callbacks.onMove(index, index + 1) })
         addView(smallButton(R.drawable.ic_delete, R.string.delete, s.danger, true) { callbacks.onDelete(t) })

@@ -50,6 +50,12 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         fun toggleLoop(id: String)
         /** [visibleOnly]: new order of the shown tracks (hidden ones stay put); else a saved order. */
         fun reorder(ids: List<String>, visibleOnly: Boolean)
+        fun volume(): Float
+        fun setVolume(v: Float)
+        fun isFavorite(id: String): Boolean
+        fun toggleFavorite(id: String)
+        fun favoritesOnly(): Boolean
+        fun setFavoritesOnly(on: Boolean)
     }
 
     private val ctx: Context = ContextThemeWrapper(ctx.applicationContext, R.style.Theme_RecordWidget)
@@ -216,6 +222,8 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         val maxH = (ctx.resources.displayMetrics.heightPixels * 0.55f).toInt()
         val listH = min(maxH, dp(ROW_DP) * tracks.size.coerceAtLeast(1))
         val page = column(
+            volumeRow(),
+            favoritesOnlyRow(),
             text(R.string.panel_hint, 12f, sub = true),
             if (tracks.isEmpty()) text(R.string.panel_empty, 14f, sub = true) else list.withHeight(listH),
             row(
@@ -224,6 +232,73 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             ),
         )
         setPage(page)
+    }
+
+    /** − [slider] +  : the record's own volume (within the phone's media volume). */
+    private fun volumeRow(): View {
+        val bar = android.widget.SeekBar(ctx).apply {
+            max = 100
+            progress = (actions.volume() * 100).toInt()
+            progressTintList = android.content.res.ColorStateList.valueOf(st.accent)
+            thumbTintList = android.content.res.ColorStateList.valueOf(st.accent)
+            contentDescription = ctx.getString(R.string.cd_volume)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
+                    if (fromUser) actions.setVolume(p / 100f)
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+            })
+        }
+        fun step(delta: Int) {
+            bar.progress = (bar.progress + delta).coerceIn(0, 100)
+            actions.setVolume(bar.progress / 100f)
+        }
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(iconButton(R.drawable.ic_volume_down, R.string.cd_volume_down, st.text) { step(-10) })
+            addView(bar, LinearLayout.LayoutParams(0, dp(44), 1f))
+            addView(iconButton(R.drawable.ic_volume_up, R.string.cd_volume_up, st.text) { step(10) })
+        }
+    }
+
+    private fun favoritesOnlyRow(): View {
+        val sw = androidx.appcompat.widget.SwitchCompat(ctx).apply {
+            isChecked = actions.favoritesOnly()
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            trackTintList = android.content.res.ColorStateList(states, intArrayOf(st.switchOn, st.separator))
+            setOnCheckedChangeListener { _, on ->
+                actions.setFavoritesOnly(on)
+                if (on && trackAdapter.items.none { actions.isFavorite(it.id) }) {
+                    say(ctx.getString(R.string.panel_fav_none))
+                }
+            }
+        }
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(44)
+            addView(
+                ImageView(ctx).apply {
+                    setImageResource(R.drawable.ic_star)
+                    imageTintList = android.content.res.ColorStateList.valueOf(STAR)
+                },
+                LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(10) },
+            )
+            addView(text(R.string.panel_fav_only, 15f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(sw)
+            setOnClickListener { sw.toggle() }
+        }
+    }
+
+    private fun iconButton(icon: Int, cd: Int, tint: Int, onClick: () -> Unit) = ImageButton(ctx).apply {
+        setImageResource(icon)
+        imageTintList = android.content.res.ColorStateList.valueOf(tint)
+        background = null
+        contentDescription = ctx.getString(cd)
+        layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+        setOnClickListener { onClick() }
     }
 
     private fun showSave() {
@@ -337,6 +412,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             val thumb: ImageView,
             val title: TextView,
             val loop: ImageView,
+            val star: ImageButton,
             val handle: ImageView,
         ) : RecyclerView.ViewHolder(rowView)
 
@@ -353,6 +429,12 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
                 imageTintList = android.content.res.ColorStateList.valueOf(st.accent)
                 contentDescription = ctx.getString(R.string.cd_looping)
             }
+            val star = ImageButton(ctx).apply {
+                background = null
+                val p = dp(9)
+                setPadding(p, p, p, p)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
             val handle = ImageView(ctx).apply {
                 setImageResource(R.drawable.ic_drag)
                 imageTintList = android.content.res.ColorStateList.valueOf(st.sub)
@@ -367,10 +449,17 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
                 addView(thumb, LinearLayout.LayoutParams(dp(36), dp(36)).apply { rightMargin = dp(10) })
                 addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(loop, LinearLayout.LayoutParams(dp(22), dp(22)).apply { leftMargin = dp(6) })
+                addView(star, LinearLayout.LayoutParams(dp(40), dp(44)))
                 addView(handle, LinearLayout.LayoutParams(dp(44), dp(44)))
                 isLongClickable = true
             }
-            val vh = VH(rowView, thumb, title, loop, handle)
+            val vh = VH(rowView, thumb, title, loop, star, handle)
+            star.setOnClickListener {
+                items.getOrNull(vh.bindingAdapterPosition)?.let {
+                    actions.toggleFavorite(it.id)
+                    notifyItemChanged(vh.bindingAdapterPosition)
+                }
+            }
             rowView.setOnClickListener {
                 items.getOrNull(vh.bindingAdapterPosition)?.let { actions.playTrack(it.id) }
             }
@@ -403,6 +492,10 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             h.title.setTextColor(if (current) st.accent else st.text)
             h.title.setTypeface(null, if (current) Typeface.BOLD else Typeface.NORMAL)
             h.loop.visibility = if (t.id == actions.loopingId()) View.VISIBLE else View.GONE
+            val fav = actions.isFavorite(t.id)
+            h.star.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+            h.star.imageTintList = android.content.res.ColorStateList.valueOf(if (fav) STAR else st.sub)
+            h.star.contentDescription = ctx.getString(if (fav) R.string.cd_fav_remove else R.string.cd_fav_add)
             val bmp = if (thumbs.containsKey(t.id)) {
                 thumbs[t.id]
             } else {
@@ -503,5 +596,6 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     companion object {
         private const val TAG = "TrackListPanel"
         private const val ROW_DP = 56
+        private const val STAR = 0xFFFFB300.toInt()
     }
 }

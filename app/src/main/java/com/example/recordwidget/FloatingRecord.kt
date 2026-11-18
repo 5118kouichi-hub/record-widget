@@ -38,6 +38,9 @@ class FloatingRecord(
         fun playTrack(id: String)
         fun toggleLoop(id: String)
         fun loopingId(): String?
+        fun setVolume(v: Float)
+        fun toggleFavorite(id: String)
+        fun setFavoritesOnly(on: Boolean)
         /** [visibleOnly]: [ids] are the shown tracks only; hidden ones keep their places. */
         fun reorder(ids: List<String>, visibleOnly: Boolean)
         /** Shown/hidden: the service keeps itself in the foreground while the record is shown. */
@@ -66,6 +69,12 @@ class FloatingRecord(
                 refreshPanel()
             }
             override fun reorder(ids: List<String>, visibleOnly: Boolean) = actions.reorder(ids, visibleOnly)
+            override fun volume() = PlaybackState.volume(ctx)
+            override fun setVolume(v: Float) = actions.setVolume(v)
+            override fun isFavorite(id: String) = PlaybackState.isFavorite(ctx, id)
+            override fun toggleFavorite(id: String) = actions.toggleFavorite(id)
+            override fun favoritesOnly() = PlaybackState.favoritesOnly(ctx)
+            override fun setFavoritesOnly(on: Boolean) = actions.setFavoritesOnly(on)
         },
     )
 
@@ -302,7 +311,7 @@ class FloatingRecord(
                     player.seekTo(scratchIndex, scratchTarget)
                 }
             }
-            player.volume = 1f
+            player.volume = PlaybackState.volume(ctx) // back to the user's volume
         }
     }
 

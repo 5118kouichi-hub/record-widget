@@ -173,7 +173,7 @@ object RecordWidget {
      * (the record box is a fixed square so it is never squashed). Older: always small.
      */
     internal fun buildViews(ctx: Context): RemoteViews {
-        val tracks = PlaybackState.playableTracks(ctx)
+        val tracks = PlaybackState.queueTracks(ctx)
         val state = synchronized(lock) {
             Snapshot(phase, restAngle, upAngle, downAngle, lastTitle, lastTrackId)
         }
@@ -184,9 +184,9 @@ object RecordWidget {
         }
         return RemoteViews(
             mapOf(
-                SizeF(170f, 96f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb),
-                SizeF(240f, 136f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb),
-                SizeF(318f, 180f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb),
+                SizeF(150f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb),
+                SizeF(218f, 160f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb),
+                SizeF(300f, 220f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb),
             ),
         )
     }
