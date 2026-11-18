@@ -14,7 +14,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -64,11 +68,15 @@ class PlaybackService : MediaSessionService() {
         // The record keeps turning while a web track buffers: it follows "wants to play".
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = updateWidget()
 
+        // Phone call etc.: playWhenReady stays true but nothing plays -> record stops.
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) = updateWidget()
+
         override fun onPlayerError(error: PlaybackException) {
             Log.w(TAG, "playback error", error)
             consecutiveErrors++
             if (consecutiveErrors < player.mediaItemCount) {
-                // Unreadable file: skip it. playWhenReady is still true, so playback resumes.
+                // Unreadable file / unreachable link: skip it. playWhenReady is still true, so
+                // playback resumes. RecordWidget debounces the brief IDLE, so the record keeps turning.
                 player.seekToNextMediaItem()
                 player.prepare()
             } else {
@@ -98,9 +106,18 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
+        // Web tracks: follow http<->https redirects (common for file hosts) and give up on a
+        // dead server instead of waiting forever.
+        val http = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(15_000)
         player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .setAudioAttributes(attrs, /* handleAudioFocus= */ true)
             .setHandleAudioBecomingNoisy(true)
+            // Keeps CPU and Wi-Fi awake while a web track streams with the screen off.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player.repeatMode = Player.REPEAT_MODE_ALL
         player.addListener(listener)
@@ -290,7 +307,7 @@ class PlaybackService : MediaSessionService() {
         PlaybackState.playableTracks(this).map { t ->
             MediaItem.Builder()
                 .setMediaId(t.id)
-                .setUri(t.url?.let(Uri::parse) ?: Uri.fromFile(TrackStore(filesDir).fileFor(t)))
+                .setUri(if (t.isRemote) Uri.parse(t.url) else Uri.fromFile(TrackStore(filesDir).fileFor(t)))
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).build())
                 .build()
         }
@@ -309,8 +326,11 @@ class PlaybackService : MediaSessionService() {
 
     private fun currentTitle(): String? = player.currentMediaItem?.mediaMetadata?.title?.toString()
 
-    private fun updateWidget() =
-        RecordWidget.update(this, isActive(), currentTitle(), player.currentMediaItem?.mediaId)
+    private fun updateWidget() {
+        val turning = isActive() &&
+            player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+        RecordWidget.update(this, turning, currentTitle(), player.currentMediaItem?.mediaId)
+    }
 
     /**
      * A getForegroundService() start must reach startForeground() within 5 s. If Media3 already
@@ -398,7 +418,7 @@ class PlaybackService : MediaSessionService() {
          */
         fun reload(ctx: Context) {
             if (!isRunning) {
-                RecordWidget.update(ctx, false, null)
+                RecordWidget.refresh(ctx)
                 return
             }
             try {
@@ -408,7 +428,7 @@ class PlaybackService : MediaSessionService() {
                 // alive but not foreground (paused), or it just stopped. Rebuild the queue on the
                 // next TOGGLE/NEXT instead (if it has stopped, the next start loads fresh anyway).
                 pendingReload = true
-                RecordWidget.update(ctx, false, null)
+                RecordWidget.refresh(ctx)
             }
         }
 

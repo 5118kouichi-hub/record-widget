@@ -12,7 +12,7 @@ data class Track(
     val fileName: String,
     val url: String? = null,
 ) {
-    val isRemote: Boolean get() = url != null
+    val isRemote: Boolean get() = !url.isNullOrBlank()
 }
 
 /**

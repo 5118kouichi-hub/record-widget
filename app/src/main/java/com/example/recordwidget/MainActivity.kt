@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.url_dialog_note)
             .setView(box)
             .setPositiveButton(R.string.add) { _, _ ->
-                startUrlImport(urlEdit.text.toString().trim(), titleEdit.text.toString().trim())
+                startUrlImport(WebLinks.normalize(urlEdit.text.toString().trim()), titleEdit.text.toString().trim())
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -227,13 +227,11 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val id = UUID.randomUUID().toString()
                 val localStore = TrackStore(app.filesDir)
-                val title = typedTitle.ifEmpty { null } ?: probe.title ?: WebLinks.nameFromUrl(url)
+                val title = typedTitle.ifEmpty { null } ?: WebLinks.nameFromUrl(url)
                     ?: app.getString(R.string.default_web_title, localStore.all().size + 1)
                 localStore.add(Track(id, title, "", url))
                 PlaybackService.reload(app)
-                if (probe.hasVideo && Thumbnails.fromUrl(url, localStore.thumbFor(id))) {
-                    RecordWidget.refresh(app)
-                }
+                if (probe.hasVideo) Thumbnails.fromUrlInBackground(app, url, localStore.thumbFor(id))
                 app.getString(R.string.added)
             }
         } catch (e: Exception) {

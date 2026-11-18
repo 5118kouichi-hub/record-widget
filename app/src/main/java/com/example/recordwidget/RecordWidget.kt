@@ -48,6 +48,8 @@ object RecordWidget {
     private var upAngle = 0 // angle the current spin-up started from
     private var upStartedAt = 0L // elapsedRealtime when the spin-up was pushed
     private var downAngle = 0 // angle the current spin-down started from
+    private var downStartedAt = 0L
+    private var thumbGeneration = 0 // bumped by refresh(); stale decodes are not cached
     private var lastTitle: String? = null
     private var lastTrackId: String? = null
     private var thumbCache: Pair<String, Bitmap?>? = null
@@ -57,7 +59,7 @@ object RecordWidget {
             if (phase != Phase.STOPPING) return@Runnable
             phase = Phase.REST
         }
-        push(appContext ?: return@Runnable)
+        pushSoon()
     }
 
     @Volatile private var appContext: Context? = null
@@ -74,24 +76,58 @@ object RecordWidget {
             lastTrackId = trackId
             val now = SystemClock.elapsedRealtime()
             if (playing && phase != Phase.SPINNING) {
-                upAngle = if (phase == Phase.STOPPING) (downAngle + RecordFrames.DOWN_DEG) % 360 else restAngle
+                // Restarting while still slowing down: start from where the record is now.
+                upAngle = if (phase == Phase.STOPPING) snap(downAngleAt(now)) else restAngle
                 upStartedAt = now
                 phase = Phase.SPINNING
                 main.removeCallbacks(settle)
-            } else if (!playing && phase == Phase.SPINNING) {
-                downAngle = snap(angleAt(now))
-                restAngle = (downAngle + RecordFrames.DOWN_DEG) % 360
-                phase = Phase.STOPPING
-                main.postDelayed(settle, RecordFrames.DOWN_MS + 300)
+                main.removeCallbacks(beginStop)
+            } else if (playing) {
+                main.removeCallbacks(beginStop) // a brief stop (skip, track change) is over
+            } else if (phase == Phase.SPINNING) {
+                // Wait a moment: skipping a broken track or changing tracks passes through
+                // "not playing" for a split second, and the record should not stutter.
+                main.removeCallbacks(beginStop)
+                main.postDelayed(beginStop, STOP_DEBOUNCE_MS)
             }
         }
-        push(ctx)
+        pushSoon()
     }
 
-    /** Thumbnail changed (added after import) -> redraw without touching the motion. */
+    private const val STOP_DEBOUNCE_MS = 400L
+
+    private val beginStop = Runnable {
+        synchronized(lock) {
+            if (phase != Phase.SPINNING) return@Runnable
+            val now = SystemClock.elapsedRealtime()
+            downAngle = snap(angleAt(now))
+            downStartedAt = now
+            restAngle = (downAngle + RecordFrames.DOWN_DEG) % 360
+            phase = Phase.STOPPING
+            main.postDelayed(settle, RecordFrames.DOWN_MS + 300)
+        }
+        pushSoon()
+    }
+
+    /** List or thumbnail changed -> redraw without touching the motion. Any thread. */
     fun refresh(ctx: Context) {
-        synchronized(lock) { thumbCache = null }
-        push(ctx)
+        appContext = ctx.applicationContext
+        synchronized(lock) {
+            thumbCache = null
+            thumbGeneration++
+        }
+        pushSoon()
+    }
+
+    /**
+     * Every push runs on the main thread, one after another, and builds from the newest
+     * state, so a slow background caller can never overwrite a newer picture.
+     */
+    private val pushRunnable = Runnable { appContext?.let { push(it) } }
+
+    private fun pushSoon() {
+        main.removeCallbacks(pushRunnable)
+        main.post(pushRunnable)
     }
 
     /** By class name: keeps this file independent of MainActivity. */
@@ -115,6 +151,12 @@ object RecordWidget {
             RecordFrames.UP_DEG + 360.0 * (t - RecordFrames.UP_MS) / RecordFrames.TURN_MS
         }
         return upAngle + turned
+    }
+
+    /** Angle while slowing down (decelerate_quad over DOWN_MS). */
+    private fun downAngleAt(now: Long): Double {
+        val f = ((now - downStartedAt).toDouble() / RecordFrames.DOWN_MS).coerceIn(0.0, 1.0)
+        return downAngle + RecordFrames.DOWN_DEG * (1 - (1 - f) * (1 - f))
     }
 
     private fun snap(deg: Double): Int {
@@ -159,10 +201,13 @@ object RecordWidget {
 
     /** Decoded once per track; 128 px circle PNG written at import (Thumbnails.kt). */
     private fun thumbnail(ctx: Context, id: String): Bitmap? {
-        synchronized(lock) { thumbCache?.let { if (it.first == id) return it.second } }
+        val gen = synchronized(lock) {
+            thumbCache?.let { if (it.first == id) return it.second }
+            thumbGeneration
+        }
         val file = TrackStore(ctx.applicationContext.filesDir).thumbFor(id)
         val bmp = if (file.isFile) BitmapFactory.decodeFile(file.path) else null
-        synchronized(lock) { thumbCache = id to bmp }
+        synchronized(lock) { if (gen == thumbGeneration) thumbCache = id to bmp }
         return bmp
     }
 

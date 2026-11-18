@@ -24,9 +24,19 @@ object Thumbnails {
     fun fromVideo(ctx: Context, src: Uri, out: File): Boolean =
         grab(out) { it.setDataSource(ctx, src) }
 
-    /** From a web video/audio URL (downloads only what the frame needs). */
-    fun fromUrl(url: String, out: File): Boolean =
-        grab(out) { it.setDataSource(url, HashMap()) }
+    /**
+     * From a web video, on its own thread so the import queue never waits for it.
+     * MediaMetadataRetriever cannot be cancelled; if the server is slow we simply give up
+     * waiting after a while and the record shows no thumbnail.
+     */
+    fun fromUrlInBackground(ctx: Context, url: String, out: File) {
+        val app = ctx.applicationContext
+        val worker = Thread {
+            if (grab(out) { it.setDataSource(url, HashMap()) }) RecordWidget.refresh(app)
+        }
+        worker.isDaemon = true
+        worker.start()
+    }
 
     private fun grab(out: File, open: (MediaMetadataRetriever) -> Unit): Boolean {
         val r = MediaMetadataRetriever()

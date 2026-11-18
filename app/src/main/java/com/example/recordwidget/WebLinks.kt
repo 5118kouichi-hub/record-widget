@@ -1,12 +1,15 @@
 package com.example.recordwidget
 
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
 
 /** Web links that can be streamed: direct links to an audio/video file or an HLS stream. */
 object WebLinks {
     private const val TAG = "WebLinks"
+    private const val TIMEOUT_MS = 10_000
 
     enum class Check { OK, INVALID, UNSUPPORTED_SITE }
 
@@ -19,6 +22,9 @@ object WebLinks {
         "spotify.com", "nicovideo.jp", "nico.ms", "music.apple.com", "soundcloud.com",
         "facebook.com", "vimeo.com",
     )
+
+    private val VIDEO_EXT = setOf("mp4", "m4v", "mov", "webm", "mkv", "3gp", "ts")
+    private val MEDIA_EXT = VIDEO_EXT + setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "m3u8")
 
     private val URL_RE = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE)
 
@@ -33,36 +39,60 @@ object WebLinks {
         return Check.OK
     }
 
+    /** Percent-encodes spaces and non-ASCII characters (typed or copied links). */
+    fun normalize(url: String): String = try {
+        val u = URL(url)
+        URI(u.protocol, u.userInfo, u.host, u.port, u.path, u.query, u.ref).toASCIIString()
+    } catch (e: Exception) {
+        url
+    }
+
     /** What reading the link told us. */
-    class Probe(val title: String?, val hasVideo: Boolean)
+    class Probe(val hasVideo: Boolean)
 
     /**
-     * Network call, off the main thread. Null when the link is not readable media.
-     * HLS playlists (.m3u8) cannot be opened by MediaMetadataRetriever but play fine.
+     * Network call, off the main thread. Asks the server for the first 64 KB only (so a big
+     * file is never downloaded here), follows redirects incl. http<->https, and gives up
+     * after [TIMEOUT_MS]. Null when the link is not audio/video (e.g. a web page).
      */
     fun probe(url: String): Probe? {
-        val path = Uri.parse(url).path?.lowercase().orEmpty()
-        if (path.endsWith(".m3u8")) return Probe(null, false)
-        val r = MediaMetadataRetriever()
-        return try {
-            r.setDataSource(url, HashMap())
-            val audio = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
-            val video = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
-            val mime = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE).orEmpty()
-            if (!audio && !mime.startsWith("audio/")) return null
-            val title = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)?.trim()
-            Probe(title?.ifEmpty { null }, video)
-        } catch (e: Exception) {
-            Log.w(TAG, "cannot read $url", e)
-            null
-        } finally {
+        var current = url
+        repeat(6) {
+            val conn = (URL(current).openConnection() as HttpURLConnection)
             try {
-                r.release()
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = TIMEOUT_MS
+                conn.readTimeout = TIMEOUT_MS
+                conn.setRequestProperty("Range", "bytes=0-65535")
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val loc = conn.getHeaderField("Location") ?: return null
+                    current = URL(URL(current), loc).toString()
+                    return@repeat
+                }
+                if (code !in 200..299) return null
+                val type = conn.contentType?.substringBefore(';')?.trim()?.lowercase().orEmpty()
+                val ext = extension(current)
+                return when {
+                    type.startsWith("video/") -> Probe(hasVideo = true)
+                    type.startsWith("audio/") || type.contains("mpegurl") || type == "application/ogg" ->
+                        Probe(hasVideo = false)
+                    type.isEmpty() || type.contains("octet-stream") ->
+                        if (ext in MEDIA_EXT || ext.isEmpty()) Probe(hasVideo = ext in VIDEO_EXT) else null
+                    else -> null // text/html and friends: a page, not a file
+                }
             } catch (e: Exception) {
-                Log.w(TAG, "release failed", e)
+                Log.w(TAG, "cannot read $current", e)
+                return null
+            } finally {
+                conn.disconnect()
             }
         }
+        return null // too many redirects
     }
+
+    private fun extension(url: String): String =
+        Uri.parse(url).lastPathSegment?.substringAfterLast('.', "")?.lowercase().orEmpty()
 
     /** "song%20name.mp3" -> "song name". */
     fun nameFromUrl(url: String): String? {
