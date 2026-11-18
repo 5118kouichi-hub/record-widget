@@ -200,7 +200,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        Updater.resumedScreens++
         // Back from the permission screen (or the permission was revoked meanwhile).
         screen.setFloatingChecked(FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this))
         PlaybackService.floatingChanged(this)
@@ -214,7 +213,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        Updater.resumedScreens--
         super.onPause()
     }
 
@@ -319,7 +317,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBusy() {
-        Updater.busyImports = pendingImports
         screen.setBusy(pendingImports > 0)
     }
 
