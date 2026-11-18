@@ -33,6 +33,14 @@ class HeroPlayerView(context: Context) : View(context) {
 
     var listener: Listener? = null
 
+    /** Face for the title on the red front (the app's display font). */
+    var titleTypeface: android.graphics.Typeface? = null
+        set(v) {
+            field = v
+            titlePaint.typeface = v
+            invalidate()
+        }
+
     private val body: Drawable = drawable(R.drawable.player_body)
     private val disc: Drawable = drawable(R.drawable.record_disc)
     private val sheen: Drawable = drawable(R.drawable.record_sheen)
@@ -120,7 +128,7 @@ class HeroPlayerView(context: Context) : View(context) {
         drawKey(canvas, nextKey, keyNext)
 
         // title on the red front of the case
-        titlePaint.textSize = 11 * k // fits the 24-unit red front
+        titlePaint.textSize = 12 * k // fits the 24-unit red front
         val t = TextUtils.ellipsize(title, titlePaint, width - 24 * k, TextUtils.TruncateAt.END).toString()
         val lipCenter = (196 + 12) * k
         canvas.drawText(t, width / 2f, lipCenter + titlePaint.textSize * 0.35f, titlePaint)

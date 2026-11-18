@@ -97,10 +97,14 @@
     <string name="update_notif_text">build-%1$d が出ました。タップしてダウンロードし、開いてインストールしてください</string>
     <string name="hero_hint">レコードをタップで再生／一時停止・キーで前の曲／次の曲</string>
     <string name="hero_hint_empty">下の「追加」から動画を選ぶと、ここで再生できます</string>
-    <string name="fan_add_video">動画を追加</string>
-    <string name="fan_add_url">URLを追加</string>
-    <string name="fan_tracks">曲の一覧</string>
+    <string name="fan_tracks">音声一覧</string>
     <string name="fan_settings">設定</string>
     <string name="cd_fan_open">メニューを開く</string>
     <string name="cd_fan_close">メニューを閉じる</string>
+    <string name="fan_add">追加</string>
+    <string name="page_add">追加</string>
+    <string name="page_tracks">音声一覧</string>
+    <string name="page_settings">設定</string>
+    <string name="add_footer">ギャラリーの動画や画面録画から音声だけを取り出します。他のアプリから「共有」で送ることもできます。</string>
+    <string name="cd_back">戻る</string>
 </resources>

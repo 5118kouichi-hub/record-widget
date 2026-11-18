@@ -5,9 +5,10 @@ import android.graphics.Typeface
 
 /**
  * The app's one look: a retro listening room that matches the widget's portable player.
- * Dark walnut background, cream paper cards, the player's red, mustard captions, serif headings.
+ * Dark walnut background, cream paper cards, the player's red, mustard captions, an old-style
+ * Mincho display face.
  */
-class UiStyle private constructor() {
+class UiStyle private constructor(ctx: Context) {
     /** Walnut background and text on it. */
     val bg = 0xFF1C130F.toInt()
     val bgGrain = 0x14FFE0B2
@@ -36,13 +37,22 @@ class UiStyle private constructor() {
     /** The cards are light whatever the system mode. */
     val dark = false
 
-    val serifBold: Typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+    /**
+     * Display face: Zen Old Mincho Bold (SIL OFL, bundled; license in assets/licenses).
+     * Characters outside the bundled set fall back to the system font automatically.
+     */
+    val serifBold: Typeface = try {
+        androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.zen_old_mincho_bold)
+    } catch (e: Exception) {
+        null
+    } ?: Typeface.create(Typeface.SERIF, Typeface.BOLD)
     val serif: Typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
 
     companion object {
-        private val INSTANCE = UiStyle()
+        @Volatile private var instance: UiStyle? = null
 
-        fun current(@Suppress("UNUSED_PARAMETER") ctx: Context): UiStyle = INSTANCE
+        fun current(ctx: Context): UiStyle =
+            instance ?: synchronized(this) { instance ?: UiStyle(ctx.applicationContext).also { instance = it } }
 
         fun themeRes(@Suppress("UNUSED_PARAMETER") ctx: Context): Int = R.style.Theme_RecordWidget_Retro
     }

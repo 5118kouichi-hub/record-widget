@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
             this,
             object : androidx.activity.OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (screen.closeFanIfOpen()) return
+                    if (screen.handleBack()) return
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
                     isEnabled = true

@@ -42,7 +42,7 @@ class FanMenuTest {
                 assertEquals("fan overlay was not added", before + 1, root.childCount)
                 assertNotNull(
                     "fan items not shown",
-                    findByDescription(root, a.getString(R.string.fan_add_video))?.takeIf { it.alpha > 0.5f },
+                    findByDescription(root, a.getString(R.string.fan_add))?.takeIf { it.alpha > 0.5f },
                 )
             }
         }

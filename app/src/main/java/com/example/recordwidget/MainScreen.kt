@@ -59,10 +59,6 @@ class MainScreen(
         fun onNext()
     }
 
-    private lateinit var scroll: ScrollView
-    private lateinit var tracksCaption: View
-    private lateinit var settingsCaption: View
-
     private val density = activity.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).roundToInt()
     private fun dpf(v: Int) = v * density
@@ -75,12 +71,26 @@ class MainScreen(
         private set
     private lateinit var progressText: TextView
     private lateinit var countText: TextView
+    private lateinit var tracksCount: TextView
     private lateinit var tracksGroup: LinearLayout
     private lateinit var hero: HeroPlayerView
     private lateinit var heroHint: TextView
     private lateinit var updateStatus: TextView
     private var syncing = false
 
+    private lateinit var root: FrameLayout
+    private lateinit var fan: FanMenu
+    private lateinit var addPage: View
+    private lateinit var tracksPage: View
+    private lateinit var settingsPage: View
+    private var openPage: View? = null
+    private var insetTop = 0
+    private var insetBottom = 0
+
+    /**
+     * Home is only the player on the table. Everything else lives on three pages that slide
+     * in from the right, opened from the FAB fan: 追加 / 音声一覧 / 設定.
+     */
     fun install() {
         val window = activity.window
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -91,21 +101,21 @@ class MainScreen(
             isAppearanceLightNavigationBars = false
         }
 
-        val content = LinearLayout(activity).apply {
+        // ---- home: the player on the table ----
+        val home = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, dp(40))
         }
-
-        // ---- the player on the table ----
-        content.addView(masthead())
+        home.addView(masthead())
         hero = HeroPlayerView(activity).apply {
+            titleTypeface = s.serifBold
             listener = object : HeroPlayerView.Listener {
                 override fun onToggle() = callbacks.onToggle()
                 override fun onPrevious() = callbacks.onPrevious()
                 override fun onNext() = callbacks.onNext()
             }
         }
-        content.addView(
+        home.addView(
             hero,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 leftMargin = dp(16)
@@ -117,74 +127,77 @@ class MainScreen(
             gravity = Gravity.CENTER
             setPadding(dp(16), dp(10), dp(16), 0)
         }
-        content.addView(heroHint)
-        content.addView(volumeBar())
+        home.addView(heroHint)
+        home.addView(volumeBar())
+        val homeScroll = ScrollView(activity).apply {
+            background = WoodDrawable(s.bg, s.bgGrain, density)
+            isFillViewport = true
+            clipToPadding = false
+            addView(home)
+        }
 
-        // ---- sleeves ----
-        tracksCaption = caption(R.string.section_tracks)
-        content.addView(tracksCaption)
-        tracksGroup = card()
-        content.addView(tracksGroup)
-        content.addView(footer(R.string.hint_widget))
-
-        content.addView(caption(R.string.section_add))
+        // ---- pages ----
         addVideoRow = actionRow(R.drawable.ic_video, R.string.add_from_video) { callbacks.onAddVideo() }
         addUrlRow = actionRow(R.drawable.ic_link, R.string.add_from_url) { callbacks.onAddUrl() }
-        content.addView(card(addVideoRow, addUrlRow))
         progressText = footer(R.string.extracting).apply {
             setTextColor(s.mustard)
             visibility = View.GONE
         }
-        content.addView(progressText)
+        addPage = page(R.string.page_add, card(addVideoRow, addUrlRow), progressText, footer(R.string.add_footer))
 
-        settingsCaption = caption(R.string.section_floating)
-        content.addView(settingsCaption)
+        tracksGroup = card()
+        tracksCount = onBgText("", 13f, s.mustard).apply {
+            typeface = s.serifBold
+            setPadding(dp(s.groupMarginDp + 6), 0, 0, dp(10))
+        }
+        tracksPage = page(R.string.page_tracks, tracksCount, tracksGroup, footer(R.string.hint_widget))
+
         floatingSwitch = switch { on -> if (!syncing) callbacks.onFloatingSwitch(on) }
-        content.addView(card(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)))
-        content.addView(footer(R.string.floating_hint))
-
-        content.addView(caption(R.string.section_update))
         val updateSwitch = switch { on -> callbacks.onAutoUpdate(on) }
         updateSwitch.isChecked = callbacks.autoUpdateOn()
         updateStatus = footer(0)
-        content.addView(
+        settingsPage = page(
+            R.string.page_settings,
+            caption(R.string.section_floating),
+            card(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)),
+            footer(R.string.floating_hint),
+            caption(R.string.section_update),
             card(
                 switchRow(R.drawable.ic_update, R.string.update_auto, updateSwitch),
                 actionRow(R.drawable.ic_update, R.string.update_check_now) { callbacks.onCheckUpdate() },
             ),
+            updateStatus,
         )
-        content.addView(updateStatus)
 
-        scroll = ScrollView(activity).apply {
-            background = WoodDrawable(s.bg, s.bgGrain, density)
-            isFillViewport = true
-            clipToPadding = false
-            addView(content)
-        }
-
-        // FAB fan in the top-right corner (stays put while the page scrolls)
-        val fan = FanMenu(
+        // ---- FAB fan in the top-right corner, above everything ----
+        fan = FanMenu(
             activity,
             s,
             listOf(
-                FanMenu.Item(R.drawable.ic_video, R.string.fan_add_video) { callbacks.onAddVideo() },
-                FanMenu.Item(R.drawable.ic_link, R.string.fan_add_url) { callbacks.onAddUrl() },
-                FanMenu.Item(R.drawable.ic_list, R.string.fan_tracks) { scrollToView(tracksCaption) },
-                FanMenu.Item(R.drawable.ic_settings, R.string.fan_settings) { scrollToView(settingsCaption) },
+                FanMenu.Item(R.drawable.ic_add, R.string.fan_add) { showPage(addPage) },
+                FanMenu.Item(R.drawable.ic_list, R.string.fan_tracks) { showPage(tracksPage) },
+                FanMenu.Item(R.drawable.ic_settings, R.string.fan_settings) { showPage(settingsPage) },
             ),
         )
-        val root = FrameLayout(activity)
+        root = FrameLayout(activity)
         fan.host = root
-        root.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val match = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        root.addView(homeScroll, match)
+        for (p in listOf(addPage, tracksPage, settingsPage)) {
+            p.visibility = View.GONE
+            root.addView(p, FrameLayout.LayoutParams(match))
+        }
         val fabLp = FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(16)
             rightMargin = dp(16)
         }
         root.addView(fan.button, fabLp)
-        fanMenu = fan
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            scroll.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insetTop = bars.top
+            insetBottom = bars.bottom
+            homeScroll.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            for (p in listOf(addPage, tracksPage, settingsPage)) p.setPadding(bars.left, bars.top, bars.right, 0)
             fabLp.topMargin = bars.top + dp(16)
             fabLp.rightMargin = bars.right + dp(16)
             fan.button.layoutParams = fabLp
@@ -193,21 +206,70 @@ class MainScreen(
         activity.setContentView(root)
     }
 
-    // ---- state from MainActivity ---------------------------------------------------------
+    /** A page: wood background, ← and a title, then its content (scrolls). */
+    private fun page(title: Int, vararg children: View): View {
+        val col = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, dp(48))
+        }
+        val header = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(14), dp(72), dp(6))
+            addView(
+                ImageButton(activity).apply {
+                    setImageResource(R.drawable.ic_back)
+                    imageTintList = ColorStateList.valueOf(s.onBg)
+                    background = RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), null, null)
+                    contentDescription = activity.getString(R.string.cd_back)
+                    setOnClickListener { closePage() }
+                },
+                LinearLayout.LayoutParams(dp(48), dp(48)),
+            )
+            addView(onBgText(activity.getString(title), 26f, s.onBg).apply { typeface = s.serifBold })
+        }
+        col.addView(header)
+        children.forEach { col.addView(it) }
+        return ScrollView(activity).apply {
+            background = WoodDrawable(s.bg, s.bgGrain, density)
+            isFillViewport = true
+            clipToPadding = false
+            isClickable = true // nothing behind the page gets touches
+            addView(col)
+        }
+    }
 
-    private var fanMenu: FanMenu? = null
+    private fun showPage(p: View) {
+        if (openPage === p) return
+        val previous = openPage
+        openPage = p
+        p.visibility = View.VISIBLE
+        p.bringToFront()
+        fan.button.bringToFront()
+        root.requestLayout()
+        p.translationX = root.width.toFloat()
+        p.animate().translationX(0f).setDuration(260).setInterpolator(android.view.animation.DecelerateInterpolator()).withEndAction {
+            if (previous != null && previous !== openPage) previous.visibility = View.GONE
+        }.start()
+    }
 
-    /** Back key: close the fan first. */
-    fun closeFanIfOpen(): Boolean {
-        val f = fanMenu ?: return false
-        if (!f.isOpen) return false
-        f.close(null)
+    private fun closePage(): Boolean {
+        val p = openPage ?: return false
+        openPage = null
+        p.animate().translationX(root.width.toFloat()).setDuration(220).withEndAction { p.visibility = View.GONE }.start()
         return true
     }
 
-    private fun scrollToView(v: View) {
-        scroll.smoothScrollTo(0, (v.top - dp(8)).coerceAtLeast(0))
+    /** Back key: fan first, then the open page. False = leave the app. */
+    fun handleBack(): Boolean = closeFanIfOpen() || closePage()
+
+    private fun closeFanIfOpen(): Boolean {
+        if (!fan.isOpen) return false
+        fan.close(null)
+        return true
     }
+
+    // ---- state from MainActivity ---------------------------------------------------------
 
     fun setFloatingChecked(on: Boolean) {
         syncing = true
@@ -234,6 +296,7 @@ class MainScreen(
 
     fun showTracks(tracks: List<Track>) {
         countText.text = activity.getString(R.string.header_count, tracks.size)
+        tracksCount.text = activity.getString(R.string.header_count, tracks.size)
         tracksGroup.removeAllViews()
         if (tracks.isEmpty()) {
             tracksGroup.addView(
@@ -258,11 +321,11 @@ class MainScreen(
         gravity = Gravity.BOTTOM
         setPadding(dp(20), dp(12), dp(72), 0) // right: room for the fan button
         addView(
-            onBgText(activity.getString(R.string.header_title), 26f, s.onBg).apply { typeface = s.serifBold },
+            onBgText(activity.getString(R.string.header_title), 28f, s.onBg).apply { typeface = s.serifBold },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         countText = onBgText("", 13f, s.mustard).apply {
-            typeface = s.serif
+            typeface = s.serifBold
             setPadding(0, 0, 0, dp(4))
         }
         addView(countText)
@@ -411,7 +474,7 @@ class MainScreen(
         )
         addView(
             text(t.title, 16f, s.text).apply {
-                typeface = s.serif
+                typeface = s.serifBold
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
                 contentDescription = activity.getString(R.string.rename_title) + " " + t.title
