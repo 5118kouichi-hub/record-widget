@@ -184,9 +184,9 @@ object RecordWidget {
         }
         return RemoteViews(
             mapOf(
-                SizeF(110f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb),
-                SizeF(140f, 170f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb),
-                SizeF(200f, 230f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb),
+                SizeF(150f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb),
+                SizeF(218f, 160f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb),
+                SizeF(300f, 220f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb),
             ),
         )
     }
@@ -241,7 +241,7 @@ object RecordWidget {
         }
 
         val playing = phase == Phase.SPINNING
-        views.setImageViewResource(R.id.tonearm, if (playing) R.drawable.tonearm_down else R.drawable.tonearm_up)
+        views.setImageViewResource(R.id.tonearm, if (playing) R.drawable.player_tonearm_down else R.drawable.player_tonearm_up)
 
         if (tracks.isEmpty()) {
             // Nothing to play -> tapping the record opens the app to add sounds.
@@ -265,7 +265,7 @@ object RecordWidget {
             views.setOnClickPendingIntent(R.id.prev, servicePendingIntent(ctx, PlaybackService.ACTION_PREV, RC_PREV))
             views.setViewVisibility(R.id.next, View.VISIBLE)
             views.setViewVisibility(R.id.prev, View.VISIBLE)
-            // The small record has room only for the two buttons.
+            // The small player has no room for a readable title on its front.
             views.setViewVisibility(R.id.title, if (layoutId == R.layout.widget_record) View.GONE else View.VISIBLE)
         }
         return views
