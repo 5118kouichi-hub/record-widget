@@ -186,6 +186,12 @@ class MainActivity : AppCompatActivity() {
         refresh() // the order may have changed from the floating record's list
     }
 
+    /** The floating record's list may have reordered tracks while this screen stayed open. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) refresh()
+    }
+
     private fun onFloatingSwitch(on: Boolean) {
         FloatingRecord.setEnabled(this, on)
         if (on && !Settings.canDrawOverlays(this)) {

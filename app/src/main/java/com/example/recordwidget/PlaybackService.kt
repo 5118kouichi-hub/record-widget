@@ -48,7 +48,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun clearLoop() {
         loopingId = null
-        player.repeatMode = Player.REPEAT_MODE_ALL
+        if (player.repeatMode != Player.REPEAT_MODE_ALL) player.repeatMode = Player.REPEAT_MODE_ALL
     }
 
     /** Current item := track [id] from its start. False if it is not in the queue. */
@@ -70,6 +70,13 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Moved to another track by any means (notification, Bluetooth, lock screen...):
+            // the single-track repeat belongs to the old track, so it ends.
+            if (loopingId != null && reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
+                mediaItem?.mediaId != loopingId
+            ) {
+                clearLoop()
+            }
             saveResume()
             updateWidget()
         }
@@ -88,8 +95,14 @@ class PlaybackService : MediaSessionService() {
         // Phone call etc.: playWhenReady stays true but nothing plays -> record stops.
         override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) = updateWidget()
 
+        override fun onRepeatModeChanged(repeatMode: Int) {
+            // Another controller changed the repeat mode: our loop mark no longer applies.
+            if (repeatMode != Player.REPEAT_MODE_ONE) loopingId = null
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             Log.w(TAG, "playback error", error)
+            clearLoop() // a broken track must not be retried as a loop
             consecutiveErrors++
             if (consecutiveErrors < player.mediaItemCount) {
                 // Unreadable file / unreachable link: skip it. playWhenReady is still true, so
@@ -200,9 +213,10 @@ class PlaybackService : MediaSessionService() {
 
         override fun loopingId(): String? = loopingId
 
-        override fun reorder(ids: List<String>) {
+        override fun reorder(ids: List<String>, visibleOnly: Boolean) {
             try {
-                TrackStore(filesDir).reorder(ids)
+                val store = TrackStore(filesDir)
+                if (visibleOnly) store.reorderAmong(ids) else store.reorder(ids)
             } catch (e: java.io.IOException) {
                 Log.w(TAG, "reorder failed", e)
                 return

@@ -24,7 +24,6 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -49,8 +48,8 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         fun loopingId(): String?
         fun playTrack(id: String)
         fun toggleLoop(id: String)
-        /** New full order of the shown tracks. */
-        fun reorder(ids: List<String>)
+        /** [visibleOnly]: new order of the shown tracks (hidden ones stay put); else a saved order. */
+        fun reorder(ids: List<String>, visibleOnly: Boolean)
     }
 
     private val ctx: Context = ContextThemeWrapper(ctx.applicationContext, R.style.Theme_RecordWidget)
@@ -60,8 +59,15 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
 
     private var root: View? = null
     private lateinit var body: FrameLayout
+    private lateinit var status: TextView
     private val trackAdapter = TrackAdapter()
     private val thumbs = HashMap<String, Bitmap?>()
+
+    /** One list view per opening (re-added when coming back to the list page). */
+    private var listView: RecyclerView? = null
+    private var dragging = false
+    private var shownCurrent: String? = null
+    private var shownLoop: String? = null
 
     val isShown: Boolean get() = root != null
 
@@ -79,6 +85,17 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             setBackgroundColor(0x88000000.toInt())
             isFocusableInTouchMode = true
             setOnClickListener { hide() } // tap outside the card closes
+            // Keyboard: overlay windows get no automatic resize on Android 11+, so pad for it.
+            setOnApplyWindowInsetsListener { v, insets ->
+                val bottom = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    insets.getInsets(android.view.WindowInsets.Type.ime() or android.view.WindowInsets.Type.systemBars()).bottom
+                } else {
+                    @Suppress("DEPRECATION")
+                    insets.systemWindowInsetBottom
+                }
+                v.setPadding(0, 0, 0, bottom)
+                insets
+            }
         }
         val m = ctx.resources.displayMetrics
         val card = LinearLayout(ctx).apply {
@@ -108,10 +125,18 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             )
         }
         body = FrameLayout(ctx)
+        // Feedback inside the card: toasts would appear behind this overlay.
+        status = text(0, 13f).apply {
+            setTextColor(COLOR_ACCENT)
+            visibility = View.GONE
+        }
         card.addView(header)
+        card.addView(status)
         card.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val w = min(m.widthPixels - dp(32), dp(380))
-        scrim.addView(card, FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        // Scrolls as a whole when the screen is short (landscape, keyboard up).
+        val scroller = android.widget.ScrollView(ctx).apply { addView(card) }
+        scrim.addView(scroller, FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -135,7 +160,12 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
 
     fun hide() {
         val r = root ?: return
+        hideKeyboard()
         root = null
+        dragging = false
+        listView?.adapter = null
+        listView = null
+        thumbs.clear()
         try {
             wm.removeView(r)
         } catch (e: Exception) {
@@ -143,9 +173,22 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         }
     }
 
-    /** Playback changed (current / loop): repaint the marks. */
+    /** Playback changed: repaint the marks, only if the current/looping track changed. */
     fun refresh() {
-        if (root != null) trackAdapter.notifyDataSetChanged()
+        if (root == null || dragging) return
+        if (actions.currentId() == shownCurrent && actions.loopingId() == shownLoop) return
+        repaint()
+    }
+
+    private fun repaint() {
+        shownCurrent = actions.currentId()
+        shownLoop = actions.loopingId()
+        trackAdapter.notifyItemRangeChanged(0, trackAdapter.itemCount)
+    }
+
+    private fun say(msg: String) {
+        status.text = msg
+        status.visibility = View.VISIBLE
     }
 
     // ---- pages ---------------------------------------------------------------------------
@@ -154,13 +197,17 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     private fun showList() {
         val tracks = PlaybackState.playableTracks(ctx)
         trackAdapter.items = tracks.toMutableList()
+        shownCurrent = actions.currentId()
+        shownLoop = actions.loopingId()
         trackAdapter.notifyDataSetChanged()
-        val list = RecyclerView(ctx).apply {
+        val list = listView ?: RecyclerView(ctx).apply {
             layoutManager = LinearLayoutManager(ctx)
             adapter = trackAdapter
             itemAnimator = null
+            trackAdapter.dragHelper.attachToRecyclerView(this)
+            listView = this
         }
-        trackAdapter.dragHelper.attachToRecyclerView(list)
+        (list.parent as? ViewGroup)?.removeView(list)
         val maxH = (ctx.resources.displayMetrics.heightPixels * 0.55f).toInt()
         val listH = min(maxH, dp(ROW_DP) * tracks.size.coerceAtLeast(1))
         val page = column(
@@ -181,13 +228,15 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_DONE
             setTextColor(COLOR_TEXT)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(COLOR_ACCENT)
         }
         val save = {
             val name = edit.text.toString().trim().ifEmpty { ctx.getString(R.string.panel_default_name, 1) }
             val ids = PlaybackState.playableTracks(ctx).map { it.id }
             SavedOrders.add(ctx, SavedOrder(UUID.randomUUID().toString(), name, ids))
-            toast(ctx.getString(R.string.panel_saved, name))
+            hideKeyboard()
             showList()
+            say(ctx.getString(R.string.panel_saved, name))
         }
         edit.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_DONE) save(); true }
         setPage(
@@ -198,6 +247,16 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             ),
         )
         edit.requestFocus()
+        edit.post {
+            val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.showSoftInput(edit, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun hideKeyboard() {
+        val r = root ?: return
+        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(r.windowToken, 0)
     }
 
     private fun showSaved() {
@@ -237,9 +296,9 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             addView(column(name, count), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(del, LinearLayout.LayoutParams(dp(44), dp(44)))
             setOnClickListener {
-                actions.reorder(o.trackIds)
-                toast(ctx.getString(R.string.panel_applied, o.name))
+                actions.reorder(o.trackIds, visibleOnly = false)
                 showList()
+                say(ctx.getString(R.string.panel_applied, o.name))
             }
         }
         del.setOnClickListener {
@@ -308,16 +367,23 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
                 items.getOrNull(vh.bindingAdapterPosition)?.let { actions.playTrack(it.id) }
             }
             rowView.setOnLongClickListener {
+                if (dragging) return@setOnLongClickListener true
                 items.getOrNull(vh.bindingAdapterPosition)?.let {
+                    val wasOn = actions.loopingId() == it.id
                     actions.toggleLoop(it.id)
                     val on = actions.loopingId() == it.id
-                    toast(ctx.getString(if (on) R.string.panel_loop_on else R.string.panel_loop_off, it.title))
+                    if (on != wasOn) say(ctx.getString(if (on) R.string.panel_loop_on else R.string.panel_loop_off, it.title))
+                    repaint()
                 }
                 true
             }
             handle.setOnTouchListener { _, e ->
-                if (e.actionMasked == MotionEvent.ACTION_DOWN) dragHelper.startDrag(vh)
-                false
+                if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                    dragHelper.startDrag(vh)
+                    true // keep the row from also starting its long-press (= loop)
+                } else {
+                    false
+                }
             }
             return vh
         }
@@ -329,8 +395,12 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             h.title.setTextColor(if (current) COLOR_ACCENT else COLOR_TEXT)
             h.title.setTypeface(null, if (current) Typeface.BOLD else Typeface.NORMAL)
             h.loop.visibility = if (t.id == actions.loopingId()) View.VISIBLE else View.GONE
-            val bmp = thumbs.getOrPut(t.id) {
-                TrackStore(ctx.filesDir).thumbFor(t.id).takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path) }
+            val bmp = if (thumbs.containsKey(t.id)) {
+                thumbs[t.id]
+            } else {
+                TrackStore(ctx.filesDir).thumbFor(t.id).takeIf { it.isFile }
+                    ?.let { BitmapFactory.decodeFile(it.path) }
+                    .also { thumbs[t.id] = it }
             }
             if (bmp != null) {
                 h.thumb.setImageBitmap(bmp)
@@ -344,6 +414,11 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
 
         val dragHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
             override fun isLongPressDragEnabled() = false // long-press = loop; drag via ≡
+
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(viewHolder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) dragging = true
+            }
 
             override fun onMove(rv: RecyclerView, from: RecyclerView.ViewHolder, to: RecyclerView.ViewHolder): Boolean {
                 val a = from.bindingAdapterPosition
@@ -359,10 +434,13 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
 
             override fun clearView(rv: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
                 super.clearView(rv, viewHolder)
+                dragging = false
                 if (dragFrom >= 0) {
                     dragFrom = -1
-                    actions.reorder(items.map { it.id }) // dropped: save once
+                    // Dropped: save once. Hidden (missing-file) tracks keep their places.
+                    actions.reorder(items.map { it.id }, visibleOnly = true)
                 }
+                repaint()
             }
         })
     }
@@ -412,7 +490,6 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
         return this
     }
 
-    private fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
 
     companion object {
         private const val TAG = "TrackListPanel"

@@ -38,7 +38,8 @@ class FloatingRecord(
         fun playTrack(id: String)
         fun toggleLoop(id: String)
         fun loopingId(): String?
-        fun reorder(ids: List<String>)
+        /** [visibleOnly]: [ids] are the shown tracks only; hidden ones keep their places. */
+        fun reorder(ids: List<String>, visibleOnly: Boolean)
         /** Shown/hidden: the service keeps itself in the foreground while the record is shown. */
         fun onShownChanged(shown: Boolean)
     }
@@ -64,7 +65,7 @@ class FloatingRecord(
                 actions.toggleLoop(id)
                 refreshPanel()
             }
-            override fun reorder(ids: List<String>) = actions.reorder(ids)
+            override fun reorder(ids: List<String>, visibleOnly: Boolean) = actions.reorder(ids, visibleOnly)
         },
     )
 

@@ -76,6 +76,18 @@ class TrackStore(private val root: File) {
         }
     }
 
+    /**
+     * New order for the tracks in [ids] only (e.g. the playable ones shown in a list): they
+     * fill the places they occupied before, so tracks not in [ids] stay where they were.
+     */
+    fun reorderAmong(ids: List<String>) {
+        synchronized(LOCK) {
+            val list = load()
+            val sorted = among(list, ids)
+            if (sorted != list) save(sorted)
+        }
+    }
+
     fun move(from: Int, to: Int) {
         synchronized(LOCK) {
             val list = load()
@@ -116,6 +128,14 @@ class TrackStore(private val root: File) {
 
     internal companion object {
         private val LOCK = Any()
+
+        fun among(list: List<Track>, ids: List<String>): List<Track> {
+            val byId = list.associateBy { it.id }
+            val wanted = ids.distinct().filter { it in byId }
+            val set = wanted.toHashSet()
+            val queue = ArrayDeque(wanted)
+            return list.map { if (it.id in set) byId.getValue(queue.removeFirst()) else it }
+        }
 
         fun ordered(list: List<Track>, ids: List<String>): List<Track> {
             val byId = list.associateBy { it.id }

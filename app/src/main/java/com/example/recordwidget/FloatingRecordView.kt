@@ -54,6 +54,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
         addView(discLayer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(topLayer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         isClickable = true
+        isLongClickable = true
     }
 
     fun setThumbnail(bmp: Bitmap?) {
@@ -109,6 +110,7 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(longPress)
         Choreographer.getInstance().removeFrameCallback(frame)
         frameScheduled = false
         super.onDetachedFromWindow()
@@ -223,6 +225,13 @@ class FloatingRecordView(context: Context) : FrameLayout(context) {
             }
             else -> {}
         }
+    }
+
+    /** TalkBack double-tap-and-hold opens the list too. */
+    override fun performLongClick(): Boolean {
+        super.performLongClick()
+        listener?.onLongPress()
+        return true
     }
 
     /** Taps and accessibility clicks (TalkBack double-tap) both play/pause. */

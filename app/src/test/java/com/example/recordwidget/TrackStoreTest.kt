@@ -206,4 +206,14 @@ class TrackStoreTest {
         s.reorder(listOf(t(3).id, "missing", t(1).id, t(3).id))
         assertEquals(listOf(t(3), t(1), t(2), t(4)), TrackStore(root).all())
     }
+
+    @Test
+    fun reorderAmongKeepsOtherTracksInPlace() {
+        val root = tmp.newFolder()
+        val s = TrackStore(root)
+        (1..5).forEach { s.add(t(it)) }
+        // only 1, 3, 5 shown (2 and 4 hidden): reverse them
+        s.reorderAmong(listOf(t(5).id, t(3).id, t(1).id))
+        assertEquals(listOf(t(5), t(2), t(3), t(4), t(1)), TrackStore(root).all())
+    }
 }
