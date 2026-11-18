@@ -47,4 +47,28 @@ class FanMenuTest {
             }
         }
     }
+
+    private fun findText(v: View, text: String): android.widget.TextView? {
+        if (v is android.widget.TextView && v.text?.toString() == text && v.isShown) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findText(v.getChildAt(i), text)?.let { return it }
+        return null
+    }
+
+    @Test
+    fun choosingAFanItemOpensItsPageAndBackClosesIt() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            sc.onActivity { a ->
+                val root = a.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
+                val looper = shadowOf(Looper.getMainLooper())
+                findByDescription(root, a.getString(R.string.cd_fan_open))!!.performClick()
+                looper.idleFor(Duration.ofSeconds(1))
+                findByDescription(root, a.getString(R.string.fan_tracks))!!.performClick()
+                looper.idleFor(Duration.ofSeconds(2))
+                assertNotNull("tracks page not shown", findText(root, a.getString(R.string.page_tracks)))
+                a.onBackPressedDispatcher.onBackPressed()
+                looper.idleFor(Duration.ofSeconds(1))
+                assertEquals("page still shown after back", null, findText(root, a.getString(R.string.page_tracks)))
+            }
+        }
+    }
 }
