@@ -43,13 +43,32 @@ class PlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private lateinit var floating: FloatingRecord
 
-    /** The set of tracks to play changed (favorites): rebuild in place, keep the current one. */
+    /**
+     * The set of tracks to play changed (favorites): rebuild in place. A current track that
+     * is no longer in the set keeps playing to its end ([keepCurrentId]), then leaves the queue.
+     */
     private fun requeue() {
-        if (player.mediaItemCount > 0 && !rebuildQueue()) {
-            player.pause()
+        if (player.mediaItemCount > 0) {
+            keepCurrentId = player.currentMediaItem?.mediaId
+            if (!rebuildQueue()) player.pause()
+            keepCurrentId = null
         }
         RecordWidget.refresh(this)
     }
+
+    /** Picking a non-favorite while "favorites only" is on: the user wants it, so play everything. */
+    private fun leaveFavoritesOnlyFor(id: String) {
+        if (!PlaybackState.favoritesOnly(this)) return
+        if ((0 until player.mediaItemCount).any { player.getMediaItemAt(it).mediaId == id }) return
+        PlaybackState.setFavoritesOnly(this, false)
+        requeue()
+    }
+
+    /** Used by [loadQueue] during [requeue]. */
+    private var keepCurrentId: String? = null
+
+    /** A track kept only until it finishes (see [requeue]); removed when playback moves on. */
+    private var transientId: String? = null
 
     /** Track repeated on its own (REPEAT_MODE_ONE), chosen in the floating record's list. */
     private var loopingId: String? = null
@@ -73,6 +92,7 @@ class PlaybackService : MediaSessionService() {
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            Companion.isPlaying = isPlaying
             if (!isPlaying) saveResume()
             updateWidget()
         }
@@ -84,6 +104,13 @@ class PlaybackService : MediaSessionService() {
                 mediaItem?.mediaId != loopingId
             ) {
                 clearLoop()
+            }
+            // Moved on from a track kept only until its end (favorites changed): drop it.
+            val gone = transientId
+            if (gone != null && mediaItem?.mediaId != gone) {
+                transientId = null
+                val i = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == gone }
+                if (i != null) player.removeMediaItem(i)
             }
             saveResume()
             updateWidget()
@@ -203,6 +230,7 @@ class PlaybackService : MediaSessionService() {
 
         override fun playTrack(id: String) {
             if (!applyPendingReload()) return
+            leaveFavoritesOnlyFor(id)
             if (loopingId != id) clearLoop()
             if (!seekToTrack(id)) return
             player.play()
@@ -210,6 +238,7 @@ class PlaybackService : MediaSessionService() {
 
         override fun toggleLoop(id: String) {
             if (!applyPendingReload()) return
+            leaveFavoritesOnlyFor(id)
             if (loopingId == id) {
                 clearLoop()
                 return
@@ -299,6 +328,7 @@ class PlaybackService : MediaSessionService() {
         if (action == ACTION_FLOATING) {
             // Setting changed in the app (plain startService, like RELOAD).
             floating.refreshSettings()
+            player.volume = PlaybackState.volume(this) // volume may have changed in the app
             if (player.mediaItemCount == 0) stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -336,6 +366,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         isRunning = false
+        isPlaying = false
         if (player.mediaItemCount > 0) saveResume()
         player.removeListener(listener)
         floating.release()
@@ -475,14 +506,29 @@ class PlaybackService : MediaSessionService() {
         PlaybackState.saveResume(this, item.mediaId, player.currentPosition)
     }
 
-    private fun loadQueue(): List<MediaItem> =
-        PlaybackState.queueTracks(this).map { t ->
+    private fun loadQueue(): List<MediaItem> {
+        val queue = PlaybackState.queueTracks(this).toMutableList()
+        transientId = null
+        val keep = keepCurrentId
+        if (keep != null && queue.none { it.id == keep }) {
+            // Put it where it sits in the full list, so playback continues with the next one.
+            val all = PlaybackState.playableTracks(this)
+            val track = all.firstOrNull { it.id == keep }
+            if (track != null) {
+                val before = all.indexOf(track)
+                val at = queue.indexOfFirst { all.indexOf(it) > before }.let { if (it < 0) queue.size else it }
+                queue.add(at, track)
+                transientId = keep
+            }
+        }
+        return queue.map { t ->
             MediaItem.Builder()
                 .setMediaId(t.id)
                 .setUri(if (t.isRemote) Uri.parse(t.url) else Uri.fromFile(TrackStore(filesDir).fileFor(t)))
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).build())
                 .build()
         }
+    }
 
     /** Playing or about to play (buffering). Used for the toggle decision. */
     private fun isActive(): Boolean =
@@ -590,6 +636,10 @@ class PlaybackService : MediaSessionService() {
         /** True between onCreate and onDestroy (same process). */
         @Volatile
         var isRunning = false
+            private set
+
+        /** Sound is coming out right now (the updater never installs then). */
+        @Volatile var isPlaying = false
             private set
 
         /** Set when a RELOAD could not be delivered; applied on the next TOGGLE/NEXT. */

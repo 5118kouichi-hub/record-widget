@@ -46,6 +46,8 @@ class MainScreen(
         fun onFavorite(t: Track)
         fun isFavorite(t: Track): Boolean
         fun onAutoUpdate(on: Boolean)
+        fun volume(): Float
+        fun onVolume(v: Float)
         fun autoUpdateOn(): Boolean
         fun onCheckUpdate()
     }
@@ -90,6 +92,10 @@ class MainScreen(
             visibility = View.GONE
         }
         content.addView(progressText)
+
+        content.addView(caption(R.string.section_volume))
+        content.addView(group(volumeRow()))
+        content.addView(footer(R.string.volume_footer))
 
         content.addView(caption(R.string.section_floating))
         floatingSwitch = SwitchCompat(activity).apply {
@@ -282,6 +288,26 @@ class MainScreen(
         minimumHeight = dp(s.rowHeightDp)
         val side = if (s.isIos) 16 else 20
         setPadding(dp(side), dp(4), dp(side - 4), dp(4))
+    }
+
+    private fun volumeRow(): View = rowBase().apply {
+        val bar = android.widget.SeekBar(activity).apply {
+            max = 100
+            progress = (callbacks.volume() * 100).roundToInt()
+            progressTintList = ColorStateList.valueOf(s.accent)
+            thumbTintList = ColorStateList.valueOf(s.accent)
+            contentDescription = activity.getString(R.string.cd_volume)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
+                    if (fromUser) callbacks.onVolume(p / 100f)
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+            })
+        }
+        addView(icon(R.drawable.ic_volume_down, s.sub).apply { (layoutParams as LinearLayout.LayoutParams).rightMargin = dp(4) })
+        addView(bar, LinearLayout.LayoutParams(0, dp(44), 1f))
+        addView(icon(R.drawable.ic_volume_up, s.sub).apply { (layoutParams as LinearLayout.LayoutParams).rightMargin = 0 })
     }
 
     private fun icon(res: Int, tint: Int): ImageView = ImageView(activity).apply {

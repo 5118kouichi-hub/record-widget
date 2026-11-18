@@ -90,7 +90,7 @@
     <string name="update_notif_title">レコードウィジェットの新しいバージョン</string>
     <string name="update_notif_confirm">タップしてアップデートを確定してください</string>
     <string name="update_channel">アップデート</string>
-    <string name="update_footer">約6時間ごとに確認し、新しいバージョンがあれば入れます。音楽を流している間は待ちます。初回だけ確認画面が出ます。</string>
+    <string name="update_footer">約6時間ごとに確認し、アプリを使っていない・音楽を流していない時に新しいバージョンを入れます。初回だけ確認画面が出ます。</string>
     <string name="panel_fav_only">お気に入りだけ再生</string>
     <string name="panel_fav_none">お気に入りがまだないので、全部の曲を流します（☆で登録）</string>
     <string name="cd_fav_add">お気に入りに登録</string>
@@ -98,4 +98,10 @@
     <string name="cd_volume">音量</string>
     <string name="cd_volume_down">音量を下げる</string>
     <string name="cd_volume_up">音量を上げる</string>
+    <string name="update_rate_limited">GitHubへの確認が多すぎるため、しばらくしてからもう一度試してください</string>
+    <string name="update_available">新しいバージョン build-%1$d があります。「今すぐ確認」で入れるか、使っていない時に自動で入ります</string>
+    <string name="update_done">build-%1$d にアップデートしました</string>
+    <string name="panel_fav_only_off">お気に入り以外の曲を選んだので「お気に入りだけ再生」をオフにしました</string>
+    <string name="section_volume">音量</string>
+    <string name="volume_footer">このアプリの音量です（スマホのメディア音量の中で調整します）。浮かぶレコードの一覧でも変えられます。</string>
 </resources>

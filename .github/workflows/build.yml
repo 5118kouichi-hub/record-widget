@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# One build at a time, in order, so an older build can never become "latest".
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,6 +36,8 @@ jobs:
         run: cp app/build/outputs/apk/debug/app-debug.apk RecordWidget.apk
 
       - name: Publish release
+        # Only main reaches phones through the in-app updater.
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

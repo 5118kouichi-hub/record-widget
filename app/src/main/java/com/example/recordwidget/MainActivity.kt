@@ -65,13 +65,18 @@ class MainActivity : AppCompatActivity() {
                     PlaybackState.setFavorite(this@MainActivity, t.id, !isFavorite(t))
                     changed() // list + playing queue ("favorites only")
                 }
+                override fun volume() = PlaybackState.volume(this@MainActivity)
+                override fun onVolume(v: Float) {
+                    PlaybackState.setVolume(this@MainActivity, v)
+                    PlaybackService.floatingChanged(this@MainActivity) // applies it to the player
+                }
                 override fun autoUpdateOn() = Updater.autoEnabled(this@MainActivity)
                 override fun onAutoUpdate(on: Boolean) = Updater.setAuto(this@MainActivity, on)
                 override fun onCheckUpdate() {
                     screen.setUpdateStatus(getString(R.string.update_checking))
                     Updater.check(
                         this@MainActivity,
-                        manual = true,
+                        Updater.Mode.MANUAL,
                         onStatus = { msg -> runOnUiThread { if (!isDestroyed) screen.setUpdateStatus(msg) } },
                     )
                 }
@@ -84,8 +89,14 @@ class MainActivity : AppCompatActivity() {
                 (Updater.status(this)?.let { it + "\n" } ?: "") + getString(R.string.update_footer),
         )
         Updater.schedule(this)
-        // Opening the app is also a good moment to look for a new version.
-        if (Updater.autoEnabled(this) && savedInstanceState == null) Updater.check(this, manual = false)
+        // Opening the app: only look for a new version (installing would close this screen).
+        if (Updater.autoEnabled(this) && savedInstanceState == null) {
+            Updater.check(
+                this,
+                Updater.Mode.LOOK,
+                onStatus = { msg -> runOnUiThread { if (!isDestroyed) screen.setUpdateStatus(msg) } },
+            )
+        }
 
         refresh()
         requestNotificationPermissionOnce()
@@ -189,6 +200,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Updater.resumedScreens++
         // Back from the permission screen (or the permission was revoked meanwhile).
         screen.setFloatingChecked(FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this))
         PlaybackService.floatingChanged(this)
@@ -199,6 +211,11 @@ class MainActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) refresh()
+    }
+
+    override fun onPause() {
+        Updater.resumedScreens--
+        super.onPause()
     }
 
     private fun onFloatingSwitch(on: Boolean) {
@@ -302,6 +319,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBusy() {
+        Updater.busyImports = pendingImports
         screen.setBusy(pendingImports > 0)
     }
 

@@ -63,6 +63,14 @@
             android:name=".UpdateReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".UpdatedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".UpdateJob"
             android:exported="false"

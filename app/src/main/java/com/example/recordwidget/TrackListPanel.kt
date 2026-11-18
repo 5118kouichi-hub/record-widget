@@ -238,7 +238,7 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
     private fun volumeRow(): View {
         val bar = android.widget.SeekBar(ctx).apply {
             max = 100
-            progress = (actions.volume() * 100).toInt()
+            progress = (actions.volume() * 100).roundToInt()
             progressTintList = android.content.res.ColorStateList.valueOf(st.accent)
             thumbTintList = android.content.res.ColorStateList.valueOf(st.accent)
             contentDescription = ctx.getString(R.string.cd_volume)
@@ -289,6 +289,14 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
             addView(text(R.string.panel_fav_only, 15f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(sw)
             setOnClickListener { sw.toggle() }
+        }
+    }
+
+    /** Playing a non-favorite turned "favorites only" off: redraw the switch and say why. */
+    private fun favoritesOnlyLeft(wasOnly: Boolean) {
+        if (wasOnly && !actions.favoritesOnly()) {
+            showList()
+            say(ctx.getString(R.string.panel_fav_only_off))
         }
     }
 
@@ -461,13 +469,19 @@ class TrackListPanel(ctx: Context, private val actions: Actions) {
                 }
             }
             rowView.setOnClickListener {
-                items.getOrNull(vh.bindingAdapterPosition)?.let { actions.playTrack(it.id) }
+                items.getOrNull(vh.bindingAdapterPosition)?.let {
+                    val wasOnly = actions.favoritesOnly()
+                    actions.playTrack(it.id)
+                    favoritesOnlyLeft(wasOnly)
+                }
             }
             rowView.setOnLongClickListener {
                 if (dragging) return@setOnLongClickListener true
                 items.getOrNull(vh.bindingAdapterPosition)?.let {
                     val wasOn = actions.loopingId() == it.id
+                    val wasOnly = actions.favoritesOnly()
                     actions.toggleLoop(it.id)
+                    favoritesOnlyLeft(wasOnly)
                     val on = actions.loopingId() == it.id
                     if (on != wasOn) say(ctx.getString(if (on) R.string.panel_loop_on else R.string.panel_loop_off, it.title))
                     repaint()

@@ -38,6 +38,7 @@ object Updater {
     private const val PREFS = "updater"
     private const val KEY_AUTO = "auto"
     private const val KEY_STATUS = "status"
+    private const val KEY_PROMPTED = "promptedBuild"
     private const val JOB_ID = 4201
     private const val CHANNEL = "updates"
     private const val NOTIF_ID = 4202
@@ -86,11 +87,26 @@ object Updater {
         }
     }
 
-    /**
-     * Checks GitHub and installs a newer build. [manual]: started from the app's button
-     * (reports every outcome; installs even while playing). [onStatus] runs on a worker thread.
-     */
-    fun check(ctx: Context, manual: Boolean, onStatus: (String) -> Unit = {}, onDone: () -> Unit = {}) {
+    /** Screens of this app currently in front (main thread). Silent installs wait while > 0. */
+    @Volatile var resumedScreens = 0
+
+    /** Imports running in the app (main thread). Silent installs wait while > 0. */
+    @Volatile var busyImports = 0
+
+    enum class Mode {
+        /** "今すぐ確認": report everything, install now (even while playing). */
+        MANUAL,
+
+        /** App just opened: only look, and say if a new version is ready. Never installs. */
+        LOOK,
+
+        /** Background job: install only when nobody is using the app or listening. */
+        BACKGROUND,
+    }
+
+    /** Checks GitHub and, depending on [mode], installs a newer build. [onStatus] runs on a worker thread. */
+    fun check(ctx: Context, mode: Mode, onStatus: (String) -> Unit = {}, onDone: () -> Unit = {}) {
+        val manual = mode == Mode.MANUAL
         val app = ctx.applicationContext
         worker.execute {
             try {
@@ -98,25 +114,38 @@ object Updater {
                     setStatus(app, s)
                     onStatus(s)
                 }
-                val latest = latest()
-                if (latest == null) {
-                    report(app.getString(R.string.update_check_failed))
-                    return@execute
+                val latest = when (val r = latest()) {
+                    is Lookup.Found -> r.release
+                    Lookup.RateLimited -> return@execute report(app.getString(R.string.update_rate_limited))
+                    Lookup.Failed -> return@execute report(app.getString(R.string.update_check_failed))
                 }
                 val current = currentBuild(app)
                 if (latest.build <= current) {
                     report(app.getString(R.string.update_latest, current))
                     return@execute
                 }
-                if (!manual && PlaybackService.isRunning) {
-                    Log.i(TAG, "update ${latest.build} waits: playing")
-                    return@execute // next check, when nothing plays
-                }
-                if (!app.packageManager.canRequestPackageInstalls()) {
-                    report(app.getString(R.string.update_need_permission))
-                    askInstallPermission(app, manual)
+                if (mode == Mode.LOOK) {
+                    report(app.getString(R.string.update_available, latest.build))
                     return@execute
                 }
+                if (mode == Mode.BACKGROUND &&
+                    (PlaybackService.isPlaying || resumedScreens > 0 || busyImports > 0)
+                ) {
+                    Log.i(TAG, "update ${latest.build} waits: in use")
+                    return@execute // next check
+                }
+                // In the background, ask (permission / confirmation) only once per new build.
+                val firstAsk = prefs(app).getLong(KEY_PROMPTED, -1L) != latest.build
+                if (!app.packageManager.canRequestPackageInstalls()) {
+                    report(app.getString(R.string.update_need_permission))
+                    if (manual || firstAsk) askInstallPermission(app, manual)
+                    prefs(app).edit().putLong(KEY_PROMPTED, latest.build).apply()
+                    return@execute
+                }
+                if (!manual && !firstAsk && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    return@execute // would only ask again; "今すぐ確認" installs it
+                }
+                prefs(app).edit().putLong(KEY_PROMPTED, latest.build).apply()
                 report(app.getString(R.string.update_downloading, latest.build))
                 val apk = download(app, latest) ?: run {
                     report(app.getString(R.string.update_download_failed))
@@ -126,33 +155,45 @@ object Updater {
                 install(app, apk)
             } catch (e: Exception) {
                 Log.w(TAG, "update failed", e)
-                onStatus(app.getString(R.string.update_check_failed))
+                val s = app.getString(R.string.update_check_failed)
+                setStatus(app, s)
+                onStatus(s)
             } finally {
                 onDone()
             }
         }
     }
 
-    private fun latest(): Release? {
+    private sealed class Lookup {
+        class Found(val release: Release) : Lookup()
+        object RateLimited : Lookup()
+        object Failed : Lookup()
+    }
+
+    private fun latest(): Lookup {
         val conn = URL(API).openConnection() as HttpURLConnection
         return try {
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
             conn.setRequestProperty("Accept", "application/vnd.github+json")
-            if (conn.responseCode != 200) return null
+            when (conn.responseCode) {
+                200 -> {}
+                403, 429 -> return Lookup.RateLimited // GitHub allows ~60 checks an hour per network
+                else -> return Lookup.Failed
+            }
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val build = json.getString("tag_name").removePrefix("build-").toLongOrNull() ?: return null
+            val build = json.getString("tag_name").removePrefix("build-").toLongOrNull() ?: return Lookup.Failed
             val assets = json.getJSONArray("assets")
             for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
                 if (a.getString("name") == APK_NAME) {
-                    return Release(build, a.getString("browser_download_url"), a.optLong("size", -1))
+                    return Lookup.Found(Release(build, a.getString("browser_download_url"), a.optLong("size", -1)))
                 }
             }
-            null
+            Lookup.Failed
         } catch (e: Exception) {
             Log.w(TAG, "cannot read latest release", e)
-            null
+            Lookup.Failed
         } finally {
             conn.disconnect()
         }
@@ -199,29 +240,47 @@ object Updater {
                 setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
             }
         }
+        // One update at a time: drop sessions left by an earlier, unconfirmed attempt.
+        for (old in installer.mySessions) {
+            try {
+                installer.abandonSession(old.sessionId)
+            } catch (e: Exception) {
+                Log.w(TAG, "cannot abandon old session", e)
+            }
+        }
         val id = installer.createSession(params)
         installer.openSession(id).use { session ->
-            session.openWrite("base.apk", 0, apk.length()).use { out ->
-                apk.inputStream().use { it.copyTo(out) }
-                session.fsync(out)
+            try {
+                session.openWrite("base.apk", 0, apk.length()).use { out ->
+                    apk.inputStream().use { it.copyTo(out) }
+                    session.fsync(out)
+                }
+                apk.delete()
+                val result = PendingIntent.getBroadcast(
+                    ctx,
+                    id,
+                    Intent(ctx, UpdateReceiver::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE, // installer adds extras
+                )
+                session.commit(result.intentSender)
+            } catch (e: Exception) {
+                session.abandon()
+                apk.delete()
+                throw e
             }
-            val result = PendingIntent.getBroadcast(
-                ctx,
-                id,
-                Intent(ctx, UpdateReceiver::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE, // installer adds extras
-            )
-            session.commit(result.intentSender)
         }
     }
 
     /** The system wants the user to confirm: open it now if we can, and leave a notification. */
     internal fun confirm(ctx: Context, confirmIntent: Intent) {
         confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            ctx.startActivity(confirmIntent) // works while the app's screen is open
-        } catch (e: Exception) {
-            Log.i(TAG, "confirmation needs a tap", e)
+        // Only over our own screen; never pop the system dialog up in the middle of another app.
+        if (resumedScreens > 0) {
+            try {
+                ctx.startActivity(confirmIntent)
+            } catch (e: Exception) {
+                Log.i(TAG, "confirmation needs a tap", e)
+            }
         }
         notify(
             ctx,
@@ -275,6 +334,13 @@ object Updater {
     internal fun installFailed(ctx: Context, message: String?) {
         setStatus(ctx, ctx.getString(R.string.update_install_failed, message ?: ""))
     }
+
+    /** Runs in the new version right after an update. */
+    internal fun onUpdated(ctx: Context) {
+        setStatus(ctx, ctx.getString(R.string.update_done, currentBuild(ctx)))
+        schedule(ctx)
+        RecordWidget.refresh(ctx)
+    }
 }
 
 /** Result of the install session. */
@@ -282,23 +348,26 @@ class UpdateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                val confirm = if (Build.VERSION.SDK_INT >= 33) {
-                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                } else {
-                    @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_INTENT)
-                }
+                val confirm = androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)
                 if (confirm != null) Updater.confirm(context, confirm)
             }
-            PackageInstaller.STATUS_SUCCESS -> {} // the new version is starting
+            PackageInstaller.STATUS_SUCCESS -> {} // this process is about to be replaced
             else -> Updater.installFailed(context, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
         }
+    }
+}
+
+/** The app was just updated (the update itself ended the old process). */
+class UpdatedReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) Updater.onUpdated(context)
     }
 }
 
 /** Periodic background check (scheduled by [Updater.schedule]). */
 class UpdateJob : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
-        Updater.check(this, manual = false, onDone = { jobFinished(params, false) })
+        Updater.check(this, Updater.Mode.BACKGROUND, onDone = { jobFinished(params, false) })
         return true
     }
 
