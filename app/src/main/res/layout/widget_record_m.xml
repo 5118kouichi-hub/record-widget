@@ -11,11 +11,23 @@
         android:layout_gravity="center">
 
         <ImageView
+            android:id="@+id/body"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
-            android:src="@drawable/player_body" />
+            android:src="@drawable/player_body_retro" />
+
+        <!-- Record jacket lying on the deck (bitmap made by Jackets.kt). -->
+        <ImageView
+            android:id="@+id/jacket"
+            android:layout_width="58.2dp"
+            android:layout_height="58.2dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="10.2dp"
+            android:layout_marginTop="48.0dp"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY" />
 
         <!-- Still record (paused) at the angle it stopped. -->
         <ImageView
@@ -435,6 +447,7 @@
             android:scaleType="fitXY"
             android:src="@drawable/record_sheen" />
 
+        <!-- Tonearm at rest (lifted); while playing / stopping one of the animated arms below. -->
         <ImageView
             android:id="@+id/tonearm"
             android:layout_width="134.5dp"
@@ -444,7 +457,168 @@
             android:layout_marginTop="7.3dp"
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
-            android:src="@drawable/player_tonearm_up" />
+            android:src="@drawable/tonearm_retro_up" />
+
+        <ProgressBar
+            android:id="@+id/arm_in_retro"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_in_retro"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_out_retro"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_out_retro"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_in_suitcase"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_in_suitcase"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_out_suitcase"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_out_suitcase"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_in_gramophone"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_in_gramophone"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_out_gramophone"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_out_gramophone"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_in_compact"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_in_compact"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_out_compact"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_out_compact"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_in_dj"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_in_dj"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
+        <ProgressBar
+            android:id="@+id/arm_out_dj"
+            android:layout_width="134.5dp"
+            android:layout_height="134.5dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="76.4dp"
+            android:layout_marginTop="7.3dp"
+            android:importantForAccessibility="no"
+            android:indeterminate="true"
+            android:indeterminateDrawable="@drawable/arm_out_dj"
+            android:indeterminateOnly="true"
+            android:maxWidth="1000dp"
+            android:maxHeight="1000dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:visibility="gone" />
 
         <!-- Tap target over the record (the whole platter). -->
         <FrameLayout

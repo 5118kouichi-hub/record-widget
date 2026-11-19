@@ -12,7 +12,10 @@ import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
+import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.sign
+import kotlin.math.sin
 import kotlin.math.max
 import kotlin.math.min
 
@@ -41,11 +44,25 @@ class HeroPlayerView(context: Context) : View(context) {
             invalidate()
         }
 
-    private val body: Drawable = drawable(R.drawable.player_body)
+    /** Which player is drawn (same choice as the widget). */
+    var skin: Skin = Skin.RETRO
+        set(v) {
+            field = v
+            body = drawable(v.body)
+            armUp = drawable(v.armUp)
+            val ink = if (v.keyDark) 0xFFEDEDED.toInt() else 0xFF3A3A3A.toInt()
+            keyPrev.setTint(ink)
+            keyNext.setTint(ink)
+            keyFace.color = if (v.keyDark) 0xFF3A3A3E.toInt() else 0xFFFBF5E6.toInt()
+            keySide.color = if (v.keyDark) 0xFF050505.toInt() else 0xFFC9BB9C.toInt()
+            titlePaint.color = v.titleColor
+            invalidate()
+        }
+
+    private var body: Drawable = drawable(R.drawable.player_body_retro)
     private val disc: Drawable = drawable(R.drawable.record_disc)
     private val sheen: Drawable = drawable(R.drawable.record_sheen)
-    private val armUp: Drawable = drawable(R.drawable.player_tonearm_up)
-    private val armDown: Drawable = drawable(R.drawable.player_tonearm_down)
+    private var armUp: Drawable = drawable(R.drawable.tonearm_retro_up)
     private val keyPrev: Drawable = drawable(R.drawable.ic_prev).apply { setTint(0xFF3A3A3A.toInt()) }
     private val keyNext: Drawable = drawable(R.drawable.ic_next).apply { setTint(0xFF3A3A3A.toInt()) }
 
@@ -62,7 +79,13 @@ class HeroPlayerView(context: Context) : View(context) {
 
     private var title: String = ""
     private var thumb: Bitmap? = null
+    private var jacket: Bitmap? = null
     private var turning = false
+
+    // Tonearm: swings onto the record shortly after it starts turning, rides it with a tiny
+    // wobble (a real record is never perfectly flat), lifts back when stopped.
+    private var armAngle = 0f
+    private var playingFor = 0f
 
     // Same feel as the widget: 0 -> 200 deg/s in 1.2 s, back to 0 in 1.5 s.
     private var angle = 0f
@@ -70,9 +93,10 @@ class HeroPlayerView(context: Context) : View(context) {
     private var lastNs = 0L
     private var scheduled = false
 
-    fun show(title: String, thumb: Bitmap?, turning: Boolean) {
+    fun show(title: String, thumb: Bitmap?, turning: Boolean, jacket: Bitmap? = this.jacket) {
         this.title = title
         this.thumb = thumb
+        this.jacket = jacket
         this.turning = turning
         contentDescription = context.getString(if (turning) R.string.cd_disc_playing else R.string.cd_disc_stopped) + " " + title
         schedule()
@@ -120,9 +144,16 @@ class HeroPlayerView(context: Context) : View(context) {
         canvas.restore()
         sheen.place(discBox)
         sheen.draw(canvas)
-        val arm = if (turning) armDown else armUp
-        arm.place(discBox)
-        arm.draw(canvas)
+        jacket?.let {
+            val l = 14 * k
+            val t = 66 * k
+            canvas.drawBitmap(it, null, RectF(l, t, l + 80 * k, t + 80 * k), bmpPaint)
+        }
+        canvas.save()
+        canvas.rotate(armAngle, discBox.left + 0.88f * discBox.width(), discBox.top + 0.12f * discBox.height())
+        armUp.place(discBox)
+        armUp.draw(canvas)
+        canvas.restore()
 
         drawKey(canvas, prevKey, keyPrev)
         drawKey(canvas, nextKey, keyNext)
@@ -153,8 +184,16 @@ class HeroPlayerView(context: Context) : View(context) {
         velocity = if (velocity < target) min(target, velocity + FloatingRecordView.FULL_SPEED / 1.2f * dt)
         else max(target, velocity - FloatingRecordView.FULL_SPEED / 1.5f * dt)
         angle = (angle + velocity * dt) % 360f
+        playingFor = if (turning) playingFor + dt else 0f
+        val armTarget = when {
+            !turning -> 0f
+            playingFor < 0.25f -> armAngle // the platter starts first, then the arm moves
+            else -> ARM_DOWN + 0.3f * sin(playingFor * 3.5f).toFloat() // warp wobble
+        }
+        val step = ARM_SPEED * dt
+        armAngle = if (abs(armTarget - armAngle) <= step) armTarget else armAngle + step * sign(armTarget - armAngle)
         invalidate()
-        if (velocity > 0f || turning) schedule() else lastNs = 0L
+        if (velocity > 0f || turning || armAngle != 0f) schedule() else lastNs = 0L
     }
 
     private fun schedule() {
@@ -204,6 +243,11 @@ class HeroPlayerView(context: Context) : View(context) {
 
     private fun hit(r: RectF, e: MotionEvent, pad: Float) =
         e.x >= r.left - pad && e.x <= r.right + pad && e.y >= r.top - pad && e.y <= r.bottom + pad
+
+    private companion object {
+        const val ARM_DOWN = 31.5f
+        const val ARM_SPEED = 32f // degrees per second, about a second to swing in
+    }
 
     override fun performClick(): Boolean {
         super.performClick()

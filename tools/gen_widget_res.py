@@ -12,6 +12,8 @@ Both phase lengths are multiples of 30 deg, so every phase starts and ends on th
 """
 import os
 
+import skins
+
 RES = "app/src/main/res"
 STEP = 30
 ANGLES = list(range(0, 360, STEP))
@@ -333,6 +335,11 @@ def player_layout(h):
     lip_h = round(24 * k, 1)
     title_size = 13 if h >= 200 else 11
     title_vis = "" if not small else 'android:visibility="gone"'
+    jl, jt, js = (round(v * k, 1) for v in skins.JACKET)
+    arms = "\n".join(
+        progress_bar(f"arm_{kind}_{sk}", f"arm_{kind}_{sk}") for sk in skins.BODIES for kind in ("in", "out"))
+    arms = arms.replace("android:layout_width=\"match_parent\"", f"android:layout_width=\"{box}dp\"")
+    arms = arms.replace("android:layout_height=\"match_parent\"", f"android:layout_height=\"{box}dp\"\n            android:layout_gravity=\"left|top\"\n            android:layout_marginLeft=\"{bl}dp\"\n            android:layout_marginTop=\"{bt}dp\"")
     box_attrs = (
         f'android:layout_width="{box}dp"\n'
         f'            android:layout_height="{box}dp"\n'
@@ -353,11 +360,23 @@ def player_layout(h):
         android:layout_gravity="center">
 
         <ImageView
+            android:id="@+id/body"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
-            android:src="@drawable/player_body" />
+            android:src="@drawable/player_body_retro" />
+
+        <!-- Record jacket lying on the deck (bitmap made by Jackets.kt). -->
+        <ImageView
+            android:id="@+id/jacket"
+            android:layout_width="{js}dp"
+            android:layout_height="{js}dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="{jl}dp"
+            android:layout_marginTop="{jt}dp"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY" />
 
         <!-- Still record (paused) at the angle it stopped. -->
         <ImageView
@@ -386,12 +405,15 @@ def player_layout(h):
             android:scaleType="fitXY"
             android:src="@drawable/record_sheen" />
 
+        <!-- Tonearm at rest (lifted); while playing / stopping one of the animated arms below. -->
         <ImageView
             android:id="@+id/tonearm"
             {box_attrs}
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
-            android:src="@drawable/player_tonearm_up" />
+            android:src="@drawable/tonearm_retro_up" />
+
+{arms}
 
         <!-- Tap target over the record (the whole platter). -->
         <FrameLayout
@@ -471,10 +493,15 @@ def main():
     sizes = [("widget_record", 110), ("widget_record_m", 160), ("widget_record_l", 220)]
     for name, height in sizes:
         write(os.path.join(RES, "layout", f"{name}.xml"), player_layout(height))
-    write(os.path.join(d, "player_body.xml"), player_body())
-    for v in ("up", "down"):
-        with open(os.path.join(d, f"tonearm_{v}.xml"), encoding="utf-8") as f:
-            write(os.path.join(d, f"player_tonearm_{v}.xml"), recolor_tonearm(f.read()))
+    for old in ("player_body.xml", "player_tonearm_up.xml", "player_tonearm_down.xml"):
+        if os.path.exists(os.path.join(d, old)):
+            os.remove(os.path.join(d, old))
+    for sk, body in skins.BODIES.items():
+        write(os.path.join(d, f"player_body_{sk}.xml"), body())
+        write(os.path.join(d, f"tonearm_{sk}_up.xml"), skins.arm_vector(sk, 0, f"{sk} tonearm lifted"))
+        write(os.path.join(d, f"tonearm_{sk}_down.xml"), skins.arm_vector(sk, skins.DOWN_DEG, f"{sk} tonearm on the record"))
+        write(os.path.join(d, f"arm_in_{sk}.xml"), skins.arm_anim(sk, "in"))
+        write(os.path.join(d, f"arm_out_{sk}.xml"), skins.arm_anim(sk, "out"))
     write("app/src/main/java/com/example/recordwidget/RecordFrames.kt", ids_kotlin())
 
 

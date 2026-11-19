@@ -54,6 +54,7 @@ object RecordWidget {
     private var lastTitle: String? = null
     private var lastTrackId: String? = null
     private var thumbCache: Pair<String, Bitmap?>? = null
+    private var jacketCache: Pair<String, Bitmap>? = null // key = trackId|skin|title
 
     private val settle = Runnable {
         synchronized(lock) {
@@ -115,6 +116,7 @@ object RecordWidget {
         appContext = ctx.applicationContext
         synchronized(lock) {
             thumbCache = null
+            jacketCache = null
             thumbGeneration++
         }
         pushSoon()
@@ -179,14 +181,16 @@ object RecordWidget {
         }
         val track = tracks.firstOrNull { it.id == state.trackId } ?: PlaybackState.resumeTrack(ctx, tracks)
         val thumb = track?.let { thumbnail(ctx, it.id) }
+        val skin = Skin.current(ctx)
+        val jacket = jacket(ctx, track, skin)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            return buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb)
+            return buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb, skin, jacket)
         }
         return RemoteViews(
             mapOf(
-                SizeF(150f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb),
-                SizeF(218f, 160f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb),
-                SizeF(300f, 220f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb),
+                SizeF(150f, 110f) to buildLayout(ctx, R.layout.widget_record, tracks, state, track, thumb, skin, jacket),
+                SizeF(218f, 160f) to buildLayout(ctx, R.layout.widget_record_m, tracks, state, track, thumb, skin, jacket),
+                SizeF(300f, 220f) to buildLayout(ctx, R.layout.widget_record_l, tracks, state, track, thumb, skin, jacket),
             ),
         )
     }
@@ -199,6 +203,17 @@ object RecordWidget {
         val title: String?,
         val trackId: String?,
     )
+
+    private fun jacket(ctx: Context, track: Track?, skin: Skin): Bitmap {
+        val key = "${track?.id}|${skin.key}|${track?.title}"
+        val gen = synchronized(lock) {
+            jacketCache?.let { if (it.first == key) return it.second }
+            thumbGeneration
+        }
+        val bmp = Jackets.make(ctx, track?.id, track?.title, skin)
+        synchronized(lock) { if (gen == thumbGeneration) jacketCache = key to bmp }
+        return bmp
+    }
 
     /** Decoded once per track; 128 px circle PNG written at import (Thumbnails.kt). */
     private fun thumbnail(ctx: Context, id: String): Bitmap? {
@@ -219,8 +234,19 @@ object RecordWidget {
         s: Snapshot,
         track: Track?,
         thumb: Bitmap?,
+        skin: Skin,
+        jacket: Bitmap,
     ): RemoteViews {
         val views = RemoteViews(ctx.packageName, layoutId)
+        views.setImageViewResource(R.id.body, skin.body)
+        views.setImageViewBitmap(R.id.jacket, jacket)
+        views.setTextColor(R.id.title, skin.titleColor)
+        val keyBg = if (skin.keyDark) R.drawable.player_key_dark else R.drawable.player_key
+        val keyTint = if (skin.keyDark) 0xFFEDEDED.toInt() else 0xFF3A3A3A.toInt()
+        for (id in intArrayOf(R.id.prev, R.id.next)) {
+            views.setInt(id, "setBackgroundResource", keyBg)
+            views.setInt(id, "setColorFilter", keyTint)
+        }
         val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val phase = if (tracks.isEmpty()) Phase.REST else s.phase
 
@@ -241,7 +267,19 @@ object RecordWidget {
         }
 
         val playing = phase == Phase.SPINNING
-        views.setImageViewResource(R.id.tonearm, if (playing) R.drawable.player_tonearm_down else R.drawable.player_tonearm_up)
+        // The arm lowers onto the record when it starts and lifts back when it stops
+        // (animated by the launcher); at rest it is the still, lifted arm.
+        val armBar = when (phase) {
+            Phase.SPINNING -> skin.armIn
+            Phase.STOPPING -> skin.armOut
+            Phase.REST -> 0
+        }
+        for (sk in Skin.entries) {
+            views.setViewVisibility(sk.armIn, if (sk.armIn == armBar) View.VISIBLE else View.GONE)
+            views.setViewVisibility(sk.armOut, if (sk.armOut == armBar) View.VISIBLE else View.GONE)
+        }
+        views.setImageViewResource(R.id.tonearm, skin.armUp)
+        views.setViewVisibility(R.id.tonearm, if (armBar == 0) View.VISIBLE else View.GONE)
 
         if (tracks.isEmpty()) {
             // Nothing to play -> tapping the record opens the app to add sounds.

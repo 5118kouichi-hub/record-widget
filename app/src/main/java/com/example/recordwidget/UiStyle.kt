@@ -41,7 +41,7 @@ class UiStyle private constructor(ctx: Context) {
      * Display face: Zen Old Mincho Bold (SIL OFL, bundled; license in assets/licenses).
      * Characters outside the bundled set fall back to the system font automatically.
      */
-    val serifBold: Typeface = try {
+    val serifBold: Typeface = Fonts.load(ctx) ?: try {
         androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.zen_old_mincho_bold)
     } catch (e: Exception) {
         null
@@ -53,6 +53,11 @@ class UiStyle private constructor(ctx: Context) {
 
         fun current(ctx: Context): UiStyle =
             instance ?: synchronized(this) { instance ?: UiStyle(ctx.applicationContext).also { instance = it } }
+
+        /** After the font changed: the next [current] builds the style again. */
+        fun reset() {
+            instance = null
+        }
 
         fun themeRes(@Suppress("UNUSED_PARAMETER") ctx: Context): Int = R.style.Theme_RecordWidget_Retro
     }

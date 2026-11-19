@@ -36,6 +36,26 @@ class MainActivity : AppCompatActivity() {
             if (uri != null) startImport(uri)
         }
 
+    /** Track whose jacket is being chosen (survives the picker round trip only in memory). */
+    private var jacketTrackId: String? = null
+
+    private val pickJacketVideo =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val id = jacketTrackId
+            if (uri != null && id != null) chooseFrame(id, uri)
+        }
+
+    private val pickJacketPhoto =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val id = jacketTrackId
+            if (uri != null && id != null) usePhoto(id, uri)
+        }
+
+    private val pickFont =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) importFont(uri)
+        }
+
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             // Denied is fine: playback works, only the notification is hidden.
@@ -57,7 +77,9 @@ class MainActivity : AppCompatActivity() {
                 override fun onToggle() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_TOGGLE)
                 override fun onPrevious() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_PREV)
                 override fun onNext() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_NEXT)
-                override fun onRename(t: Track) = confirmRename(t)
+                override fun onRename(t: Track) = trackMenu(t)
+                override fun onChooseSkin() = chooseSkin()
+                override fun onChooseFont() = chooseFont()
                 override fun onDelete(t: Track) = confirmDelete(t)
                 override fun onMove(from: Int, to: Int) = moveTrack(from, to)
                 override fun isFavorite(t: Track) = PlaybackState.isFavorite(this@MainActivity, t.id)
@@ -87,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         screen.tracksExtra = shared.mineSection
         screen.settingsExtra = shared.nameSection
         screen.install()
+        screen.setSkin(Skin.current(this))
         // Back closes the fan menu first.
         onBackPressedDispatcher.addCallback(
             this,
@@ -230,6 +253,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var thumbFor: Pair<String, android.graphics.Bitmap?>? = null
+    private var jacketFor: Pair<String, android.graphics.Bitmap>? = null
+    /** Bumped when a track's picture changes so the cached pictures are redrawn. */
+    private var artVersion = 0
 
     private fun showNowPlaying(np: PlaybackService.Companion.NowPlaying = PlaybackService.nowPlaying) {
         val tracks = PlaybackState.queueTracks(this)
@@ -239,7 +265,11 @@ class MainActivity : AppCompatActivity() {
                 ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
                 .also { thumbFor = t.id to it }
         }
-        screen.showNowPlaying(np.title ?: track?.title, thumb, np.turning, tracks.isNotEmpty())
+        val skin = Skin.current(this)
+        val jacketKey = "${track?.id}|${skin.key}|${track?.title}|$artVersion"
+        val jacket = jacketFor?.takeIf { it.first == jacketKey }?.second
+            ?: Jackets.make(this, track?.id, track?.title, skin).also { jacketFor = jacketKey to it }
+        screen.showNowPlaying(np.title ?: track?.title, thumb, np.turning, tracks.isNotEmpty(), jacket)
     }
 
     override fun onStart() {
@@ -403,6 +433,222 @@ class MainActivity : AppCompatActivity() {
         } catch (e: IOException) {
             storageError(e)
             refresh()
+        }
+    }
+
+    // ---- look: player type, font, jackets -------------------------------------------------
+
+    private fun chooseSkin() {
+        val skins = Skin.entries
+        val current = skins.indexOf(Skin.current(this))
+        AlertDialog.Builder(this)
+            .setTitle("プレーヤーの種類")
+            .setSingleChoiceItems(skins.map { it.label }.toTypedArray(), current) { d, which ->
+                Skin.set(this, skins[which])
+                screen.setSkin(skins[which])
+                jacketFor = null
+                showNowPlaying()
+                RecordWidget.refresh(this)
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseFont() {
+        val choices = Fonts.choices(this)
+        val currentKey = Fonts.currentKey(this)
+        val labels = choices.map { it.label } + listOf("＋ フォントファイルを読み込む…")
+        val b = AlertDialog.Builder(this)
+            .setTitle("フォント")
+            .setSingleChoiceItems(labels.toTypedArray(), choices.indexOfFirst { it.key == currentKey }) { d, which ->
+                d.dismiss()
+                if (which == choices.size) {
+                    AlertDialog.Builder(this)
+                        .setTitle("フォントファイルを読み込む")
+                        .setMessage(
+                            "公式サイトから自分でダウンロードした .ttf / .otf を選んでください（zip は先に「ファイル」アプリで展開）。" +
+                                "読み込んだフォントはこのスマホの中だけで使われ、ほかの人には渡りません。" +
+                                "有料フォントは購入したものだけ使ってください。",
+                        )
+                        .setPositiveButton("ファイルを選ぶ") { _, _ ->
+                            pickFont.launch(arrayOf("font/ttf", "font/otf", "font/*", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream"))
+                        }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                } else {
+                    applyFont(choices[which].key)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+        if (currentKey.startsWith("file:")) {
+            b.setNeutralButton("今のフォントを削除") { _, _ ->
+                Fonts.remove(this, currentKey)
+                applyFont("zen")
+            }
+        }
+        b.show()
+    }
+
+    private fun applyFont(key: String) {
+        Fonts.select(this, key)
+        UiStyle.reset()
+        recreate()
+    }
+
+    private fun importFont(uri: Uri) {
+        val name = try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        } catch (e: Exception) {
+            null
+        }
+        val app = applicationContext
+        executor.execute {
+            val key = try {
+                Fonts.import(app, uri, name)
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (key == null) toast("フォントとして読み込めませんでした（.ttf / .otf を選んでください）") else applyFont(key)
+            }
+        }
+    }
+
+    private fun trackMenu(t: Track) {
+        val items = arrayOf("名前を変える", "ジャケット：動画の好きな場面にする", "ジャケット：写真を使う")
+        AlertDialog.Builder(this)
+            .setTitle(t.title)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> confirmRename(t)
+                    1 -> {
+                        jacketTrackId = t.id
+                        toast("この曲の元の動画を選んでください")
+                        pickJacketVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                    }
+                    else -> {
+                        jacketTrackId = t.id
+                        pickJacketPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                }
+            }
+            .show()
+    }
+
+    /** Scrub through the video and keep the frame shown when 決定 is pressed. */
+    private fun chooseFrame(id: String, uri: Uri) {
+        val app = applicationContext
+        val preview = android.widget.ImageView(this).apply {
+            adjustViewBounds = true
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(0xFF000000.toInt())
+            minimumHeight = (180 * resources.displayMetrics.density).toInt()
+        }
+        val label = android.widget.TextView(this).apply { setPadding(0, 12, 0, 0) }
+        val seek = android.widget.SeekBar(this).apply { max = 1000 }
+        val col = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val p = (20 * resources.displayMetrics.density).toInt()
+            setPadding(p, p / 2, p, 0)
+            addView(preview)
+            addView(label)
+            addView(seek)
+        }
+        var duration = 0L
+        var current: android.graphics.Bitmap? = null
+        var wanted = 1_000_000L
+        var loading = false
+        fun load() {
+            if (loading) return
+            loading = true
+            val at = wanted
+            executor.execute {
+                val f = Thumbnails.frameAt(app, uri, at)
+                runOnUiThread {
+                    loading = false
+                    if (isDestroyed) return@runOnUiThread
+                    if (f != null) {
+                        current = f
+                        preview.setImageBitmap(f)
+                    }
+                    if (at != wanted) load() // the slider moved meanwhile
+                }
+            }
+        }
+        fun time(us: Long) = "%d:%02d".format(us / 60_000_000, us / 1_000_000 % 60)
+        seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
+                if (!fromUser || duration <= 0) return
+                wanted = duration * p / 1000
+                label.text = "${time(wanted)} / ${time(duration)}"
+                load()
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+        })
+        executor.execute {
+            val d = Thumbnails.durationUs(app, uri)
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                duration = d
+                wanted = minOf(1_000_000L, d / 2)
+                seek.progress = if (d > 0) (wanted * 1000 / d).toInt() else 0
+                label.text = if (d > 0) "${time(wanted)} / ${time(d)}　スライダーで場面を選んでください" else "動画を読み込めませんでした"
+                load()
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("ジャケットにする場面")
+            .setView(col)
+            .setPositiveButton("決定") { _, _ ->
+                val frame = current ?: return@setPositiveButton toast("場面を読み込んでいるところです。もう一度お試しください")
+                saveJacket(id, frame)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun usePhoto(id: String, uri: Uri) {
+        val app = applicationContext
+        executor.execute {
+            val bmp = try {
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                app.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1600) sample *= 2
+                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+                app.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (bmp == null) toast("写真を読み込めませんでした") else saveJacket(id, bmp)
+            }
+        }
+    }
+
+    private fun saveJacket(id: String, frame: android.graphics.Bitmap) {
+        val app = applicationContext
+        executor.execute {
+            val ok = try {
+                Thumbnails.save(frame, TrackStore(app.filesDir).thumbFor(id))
+                true
+            } catch (e: Exception) {
+                false
+            }
+            RecordWidget.refresh(app)
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                artVersion++
+                thumbFor = null
+                jacketFor = null
+                showNowPlaying()
+                toast(if (ok) "ジャケットを変えました" else "保存できませんでした")
+            }
         }
     }
 

@@ -69,6 +69,7 @@ class TrackStore(private val root: File) {
             val removed = list.removeAt(i)
             save(list) // persist first; if this throws the audio file is kept
             if (!removed.isRemote) fileFor(removed).delete()
+            File(root, "art/${removed.id}.jpg").delete()
             thumbFor(removed.id).delete()
             removed
         }

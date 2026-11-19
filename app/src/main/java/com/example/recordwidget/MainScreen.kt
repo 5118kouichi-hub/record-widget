@@ -45,6 +45,8 @@ class MainScreen(
         fun onAddUrl()
         fun onFloatingSwitch(on: Boolean)
         fun onRename(t: Track)
+        fun onChooseSkin()
+        fun onChooseFont()
         fun onDelete(t: Track)
         fun onMove(from: Int, to: Int)
         fun onFavorite(t: Track)
@@ -167,6 +169,12 @@ class MainScreen(
         updateStatus = footer(0)
         settingsPage = page(
             R.string.page_settings,
+            caption(R.string.section_look),
+            card(
+                actionRow(R.drawable.ic_settings, R.string.look_skin) { callbacks.onChooseSkin() },
+                actionRow(R.drawable.ic_note, R.string.look_font) { callbacks.onChooseFont() },
+            ),
+            footer(R.string.look_footer),
             caption(R.string.section_floating),
             card(switchRow(R.drawable.ic_floating, R.string.floating_switch_short, floatingSwitch)),
             footer(R.string.floating_hint),
@@ -298,8 +306,12 @@ class MainScreen(
         updateStatus.text = text
     }
 
-    fun showNowPlaying(title: String?, thumb: Bitmap?, turning: Boolean, hasTracks: Boolean) {
-        hero.show(title ?: activity.getString(R.string.widget_empty_hint), thumb, turning)
+    fun setSkin(skin: Skin) {
+        hero.skin = skin
+    }
+
+    fun showNowPlaying(title: String?, thumb: Bitmap?, turning: Boolean, hasTracks: Boolean, jacket: Bitmap?) {
+        hero.show(title ?: activity.getString(R.string.widget_empty_hint), thumb, turning, jacket)
         heroHint.text = activity.getString(if (hasTracks) R.string.hero_hint else R.string.hero_hint_empty)
     }
 

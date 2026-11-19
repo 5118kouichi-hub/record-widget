@@ -111,4 +111,8 @@
     <string name="shared_mine">マイリスト（みんなと共有）</string>
     <string name="shared_mine_footer">自分のライブ音声などをまとめて、公開か非公開を選んでアップロードできます。公開したリストはみんなのホームに並びます。</string>
     <string name="shared_name_caption">ニックネーム</string>
+    <string name="section_look">見た目</string>
+    <string name="look_skin">プレーヤーの種類</string>
+    <string name="look_font">フォント</string>
+    <string name="look_footer">プレーヤーの種類はウィジェットにも反映されます。フォントはアプリの画面だけ（ウィジェットの文字は Android の仕組み上変えられません）。曲のジャケットは音声一覧で曲名をタップして変えられます。</string>
 </resources>

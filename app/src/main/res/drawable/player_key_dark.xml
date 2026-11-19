@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark push key (suitcase / DJ players). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:top="1.5dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="5dp" />
+            <solid android:color="#FF050505" />
+        </shape>
+    </item>
+    <item android:bottom="1.5dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="5dp" />
+            <solid android:color="#FF3A3A3E" />
+            <stroke android:width="0.8dp" android:color="#FF55555A" />
+        </shape>
+    </item>
+</layer-list>
