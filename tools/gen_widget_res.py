@@ -340,6 +340,25 @@ def player_layout(h):
         progress_bar(f"arm_{kind}_{sk}", f"arm_{kind}_{sk}") for sk in skins.BODIES for kind in ("in", "out"))
     arms = arms.replace("android:layout_width=\"match_parent\"", f"android:layout_width=\"{box}dp\"")
     arms = arms.replace("android:layout_height=\"match_parent\"", f"android:layout_height=\"{box}dp\"\n            android:layout_gravity=\"left|top\"\n            android:layout_marginLeft=\"{bl}dp\"\n            android:layout_marginTop=\"{bt}dp\"")
+    def zone(name, left_frac, label, cd):
+        zl = round(bl + left_frac * box, 1)
+        zt = round(bt + 0.30 * box, 1)
+        zw = round(0.20 * box, 1)
+        zh = round(0.52 * box, 1)
+        return f"""        <!-- Tap the {name.split('_')[1]} edge of the record: 10 s {'back' if 'back' in name else 'forward'}. -->
+        <TextView
+            android:id="@+id/{name}"
+            android:layout_width="{zw}dp"
+            android:layout_height="{zh}dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="{zl}dp"
+            android:layout_marginTop="{zt}dp"
+            android:gravity="center"
+            android:text="{label}"
+            android:textColor="#66FFFFFF"
+            android:textSize="{max(7, round(9 * k))}sp"
+            android:contentDescription="@string/{cd}" />"""
+    seek_zones = zone("seek_back", 0.02, "−10", "cd_seek_back") + "\n\n" + zone("seek_fwd", 0.66, "+10", "cd_seek_fwd")
     box_attrs = (
         f'android:layout_width="{box}dp"\n'
         f'            android:layout_height="{box}dp"\n'
@@ -420,6 +439,8 @@ def player_layout(h):
             android:id="@+id/disc_area"
             {box_attrs}
             android:contentDescription="@string/cd_disc_stopped" />
+
+{seek_zones}
 
 {key_button("prev", "ic_prev", "cd_prev", key, key_l1, keys_top)}
 

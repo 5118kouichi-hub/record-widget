@@ -33,6 +33,8 @@ object RecordWidget {
     private const val RC_NEXT = 2
     private const val RC_OPEN_APP = 3
     private const val RC_PREV = 5
+    private const val RC_SEEK_BACK = 6
+    private const val RC_SEEK_FWD = 7
 
     /**
      * How the record moves. The launcher animates it (see tools/gen_widget_res.py); this
@@ -291,6 +293,8 @@ object RecordWidget {
             )
             views.setViewVisibility(R.id.next, View.GONE)
             views.setViewVisibility(R.id.prev, View.GONE)
+            views.setViewVisibility(R.id.seek_back, View.GONE)
+            views.setViewVisibility(R.id.seek_fwd, View.GONE)
             views.setViewVisibility(R.id.title, View.VISIBLE)
         } else {
             views.setTextViewText(R.id.title, s.title ?: track?.title)
@@ -303,6 +307,10 @@ object RecordWidget {
             views.setOnClickPendingIntent(R.id.prev, servicePendingIntent(ctx, PlaybackService.ACTION_PREV, RC_PREV))
             views.setViewVisibility(R.id.next, View.VISIBLE)
             views.setViewVisibility(R.id.prev, View.VISIBLE)
+            views.setOnClickPendingIntent(R.id.seek_back, servicePendingIntent(ctx, PlaybackService.ACTION_SEEK_BACK, RC_SEEK_BACK))
+            views.setOnClickPendingIntent(R.id.seek_fwd, servicePendingIntent(ctx, PlaybackService.ACTION_SEEK_FWD, RC_SEEK_FWD))
+            views.setViewVisibility(R.id.seek_back, View.VISIBLE)
+            views.setViewVisibility(R.id.seek_fwd, View.VISIBLE)
             // The small player has no room for a readable title on its front.
             views.setViewVisibility(R.id.title, if (layoutId == R.layout.widget_record) View.GONE else View.VISIBLE)
         }

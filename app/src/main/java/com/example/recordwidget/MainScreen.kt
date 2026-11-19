@@ -80,6 +80,47 @@ class MainScreen(
     private lateinit var updateStatus: TextView
     private var syncing = false
 
+    /**
+     * Turning the record in the app moves through the track like the floating record:
+     * one turn = 15 s, clockwise forward; silent while held, jumps when let go.
+     */
+    private val scratch = object {
+        private var from = 0L
+        private var index = 0
+        private var player: androidx.media3.common.Player? = null
+
+        fun start(): Boolean {
+            val p = PlaybackService.seekablePlayer() ?: return false
+            player = p
+            from = p.currentPosition
+            index = p.currentMediaItemIndex
+            p.volume = 0f
+            return true
+        }
+
+        private fun target(totalDeg: Float): Long {
+            val p = player ?: return 0L
+            val dur = p.duration
+            val max = if (dur > 0) dur - 500 else from + 10 * 60_000L
+            return (from + (totalDeg / 360f * 15_000f).toLong()).coerceIn(0L, max.coerceAtLeast(0L))
+        }
+
+        fun move(totalDeg: Float): String {
+            val t = target(totalDeg) / 1000
+            return "%d:%02d".format(t / 60, t % 60)
+        }
+
+        fun end(totalDeg: Float, cancelled: Boolean) {
+            val p = player ?: return
+            if (!cancelled) {
+                val t = target(totalDeg)
+                if (kotlin.math.abs(t - from) > 200 && index < p.mediaItemCount) p.seekTo(index, t)
+            }
+            p.volume = PlaybackState.volume(activity)
+            player = null
+        }
+    }
+
     /** Sections added by the shared lists (set before [install]). */
     var homeExtra: View? = null
     var tracksExtra: View? = null
@@ -120,6 +161,9 @@ class MainScreen(
                 override fun onToggle() = callbacks.onToggle()
                 override fun onPrevious() = callbacks.onPrevious()
                 override fun onNext() = callbacks.onNext()
+                override fun onScratchStart() = scratch.start()
+                override fun onScratch(totalDeg: Float) = scratch.move(totalDeg)
+                override fun onScratchEnd(totalDeg: Float, cancelled: Boolean) = scratch.end(totalDeg, cancelled)
             }
         }
         home.addView(

@@ -157,6 +157,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        live = this
 
         // Same id/channel as the placeholder notification below, so Media3 replaces it in place.
         val provider = DefaultMediaNotificationProvider.Builder(this)
@@ -347,6 +348,18 @@ class PlaybackService : MediaSessionService() {
             ACTION_TOGGLE -> toggle(startId)
             ACTION_NEXT -> next(startId)
             ACTION_PREV -> previous(startId)
+            ACTION_SEEK_BACK, ACTION_SEEK_FWD -> {
+                // Widget: tap the left / right edge of the record = 10 s back / forward.
+                if (player.mediaItemCount > 0 && player.isCurrentMediaItemSeekable) {
+                    val step = if (action == ACTION_SEEK_BACK) -SEEK_STEP_MS else SEEK_STEP_MS
+                    val dur = player.duration
+                    val max = if (dur > 0) dur - 500 else Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + step).coerceIn(0L, max.coerceAtLeast(0L)))
+                } else if (player.mediaItemCount == 0) {
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    stopSelf(startId)
+                }
+            }
             else -> {
                 Log.w(TAG, "ignoring unknown action $action")
                 if (player.mediaItemCount == 0) {
@@ -366,6 +379,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         isRunning = false
+        if (live === this) live = null
         isPlaying = false
         publish(NowPlaying(false, null, null))
         if (player.mediaItemCount > 0) saveResume()
@@ -629,6 +643,16 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_RELOAD = "com.example.recordwidget.RELOAD"
         const val ACTION_PREV = "com.example.recordwidget.PREV"
         const val ACTION_FLOATING = "com.example.recordwidget.FLOATING"
+        const val ACTION_SEEK_BACK = "com.example.recordwidget.SEEK_BACK"
+        const val ACTION_SEEK_FWD = "com.example.recordwidget.SEEK_FWD"
+        private const val SEEK_STEP_MS = 10_000L
+
+        /** The running service (same process), for scratching the record in the app. Main thread. */
+        @Volatile private var live: PlaybackService? = null
+
+        /** The player if it has a seekable track loaded; main thread only. */
+        fun seekablePlayer(): androidx.media3.common.Player? =
+            live?.player?.takeIf { it.mediaItemCount > 0 && it.isCurrentMediaItemSeekable }
 
         /** = DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID / DEFAULT_CHANNEL_ID. */
         const val NOTIFICATION_ID = 1001

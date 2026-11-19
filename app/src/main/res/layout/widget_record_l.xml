@@ -630,6 +630,34 @@
             android:layout_marginTop="10.0dp"
             android:contentDescription="@string/cd_disc_stopped" />
 
+        <!-- Tap the back edge of the record: 10 s back. -->
+        <TextView
+            android:id="@+id/seek_back"
+            android:layout_width="37.0dp"
+            android:layout_height="96.2dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="108.7dp"
+            android:layout_marginTop="65.5dp"
+            android:gravity="center"
+            android:text="−10"
+            android:textColor="#66FFFFFF"
+            android:textSize="9sp"
+            android:contentDescription="@string/cd_seek_back" />
+
+        <!-- Tap the fwd edge of the record: 10 s forward. -->
+        <TextView
+            android:id="@+id/seek_fwd"
+            android:layout_width="37.0dp"
+            android:layout_height="96.2dp"
+            android:layout_gravity="left|top"
+            android:layout_marginLeft="227.1dp"
+            android:layout_marginTop="65.5dp"
+            android:gravity="center"
+            android:text="+10"
+            android:textColor="#66FFFFFF"
+            android:textSize="9sp"
+            android:contentDescription="@string/cd_seek_fwd" />
+
         <ImageButton
             android:id="@+id/prev"
             android:layout_width="26.0dp"

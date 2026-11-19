@@ -32,6 +32,12 @@ class HeroPlayerView(context: Context) : View(context) {
         fun onToggle()
         fun onPrevious()
         fun onNext()
+
+        /** Finger started turning the record. False = this track cannot be moved in. */
+        fun onScratchStart(): Boolean = false
+        /** [totalDeg] turned so far (clockwise = forward). Returns the time to show. */
+        fun onScratch(totalDeg: Float): String? = null
+        fun onScratchEnd(totalDeg: Float, cancelled: Boolean) {}
     }
 
     var listener: Listener? = null
@@ -154,6 +160,10 @@ class HeroPlayerView(context: Context) : View(context) {
         armUp.place(discBox)
         armUp.draw(canvas)
         canvas.restore()
+        overlayText?.let {
+            overlayPaint.textSize = 26 * k
+            canvas.drawText(it, recordCx(), recordCy() + 9 * k, overlayPaint)
+        }
 
         drawKey(canvas, prevKey, keyPrev)
         drawKey(canvas, nextKey, keyNext)
@@ -218,15 +228,75 @@ class HeroPlayerView(context: Context) : View(context) {
 
     private var downX = 0f
     private var downY = 0f
+    private var onRecord = false
+    private var scratching = false
+    private var scratchable = false
+    private var lastDeg = 0f
+    private var scratchTotal = 0f
+    private var overlayText: String? = null
+    private val overlayPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+        setShadowLayer(6f, 0f, 2f, 0xCC000000.toInt())
+    }
+
+    private fun recordCx() = discBox.left + 0.44f * discBox.width()
+    private fun recordCy() = discBox.top + 0.56f * discBox.height()
+    private fun degAt(e: MotionEvent) =
+        Math.toDegrees(kotlin.math.atan2((e.y - recordCy()).toDouble(), (e.x - recordCx()).toDouble())).toFloat()
+
+    private fun endScratch(cancelled: Boolean) {
+        if (!scratching) return
+        scratching = false
+        overlayText = null
+        if (scratchable) listener?.onScratchEnd(scratchTotal, cancelled)
+        parent?.requestDisallowInterceptTouchEvent(false)
+        invalidate()
+    }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x
                 downY = e.y
+                val dist = hypot(e.x - recordCx(), e.y - recordCy())
+                onRecord = dist < 0.48f * discBox.width() && dist > 0.12f * discBox.width()
+                scratching = false
+                if (onRecord) parent?.requestDisallowInterceptTouchEvent(true) // don't scroll the page
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!onRecord) return true
+                if (!scratching) {
+                    if (hypot(e.x - downX, e.y - downY) < 10 * resources.displayMetrics.density) return true
+                    scratching = true
+                    scratchTotal = 0f
+                    lastDeg = degAt(e)
+                    scratchable = listener?.onScratchStart() == true
+                    return true
+                }
+                val now = degAt(e)
+                var d = now - lastDeg
+                if (d > 180f) d -= 360f
+                if (d < -180f) d += 360f
+                lastDeg = now
+                scratchTotal += d
+                angle = ((angle + d) % 360f + 360f) % 360f // the record follows the finger
+                if (scratchable) overlayText = listener?.onScratch(scratchTotal)
+                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                endScratch(cancelled = true)
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                if (scratching) {
+                    endScratch(cancelled = false)
+                    return true
+                }
+                parent?.requestDisallowInterceptTouchEvent(false)
                 if (hypot(e.x - downX, e.y - downY) > 24 * resources.displayMetrics.density) return true
                 val pad = 6 * k
                 when {

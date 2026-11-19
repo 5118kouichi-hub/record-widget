@@ -41,10 +41,19 @@ object Jackets {
             c.drawRoundRect(rect, radius, radius, p)
             p.shader = null
             art.recycle()
+        } else if (round != null) {
+            // Only the round label picture exists (tracks added before jackets): enlarge it
+            // until the circle covers the whole sleeve, so the picture fills the jacket.
+            val d = s * 1.45f
+            c.save()
+            c.clipPath(android.graphics.Path().apply { addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW) })
+            c.drawBitmap(round, null, RectF((s - d) / 2, (s - d) / 2, (s + d) / 2, (s + d) / 2), p)
+            c.restore()
+            round.recycle()
         } else {
             p.color = skin.sleeve
             c.drawRoundRect(rect, radius, radius, p)
-            // printed design: rings like a record, the round picture (if any) in the middle
+            // printed design: rings like a record and the title
             p.style = Paint.Style.STROKE
             p.color = skin.sleeveInk
             p.alpha = 90
@@ -54,12 +63,7 @@ object Jackets {
             }
             p.style = Paint.Style.FILL
             p.alpha = 255
-            if (round != null) {
-                c.drawBitmap(round, null, RectF(s * 0.3f, s * 0.26f, s * 0.7f, s * 0.66f), p)
-                round.recycle()
-            } else {
-                c.drawCircle(s / 2, s * 0.46f, s * 0.11f, p)
-            }
+            c.drawCircle(s / 2, s * 0.46f, s * 0.11f, p)
             title?.takeIf { it.isNotBlank() }?.let {
                 val tp = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = skin.sleeveInk

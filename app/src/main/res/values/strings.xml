@@ -115,4 +115,6 @@
     <string name="look_skin">プレーヤーの種類</string>
     <string name="look_font">フォント</string>
     <string name="look_footer">プレーヤーの種類はウィジェットにも反映されます。フォントはアプリの画面だけ（ウィジェットの文字は Android の仕組み上変えられません）。曲のジャケットは音声一覧で曲名をタップして変えられます。</string>
+    <string name="cd_seek_back">10秒戻す</string>
+    <string name="cd_seek_fwd">10秒進める</string>
 </resources>
