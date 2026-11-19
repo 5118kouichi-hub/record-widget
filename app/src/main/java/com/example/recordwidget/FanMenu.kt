@@ -243,7 +243,11 @@ class FanMenu(
                 TextView(activity).apply {
                     setText(item.label)
                     textSize = 11f
-                    letterSpacing = 0.12f
+                    // Fixed width, one line, centred under the circle (no letter spacing: it
+                    // pushed the text off-centre, and long labels got cut).
+                    width = dp(88)
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    maxLines = 1
                     typeface = s.serifBold
                     setTextColor(s.onBg)
                     setShadowLayer(4f, 0f, 1f, 0xCC000000.toInt())

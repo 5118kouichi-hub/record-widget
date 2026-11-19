@@ -203,6 +203,7 @@ class MainActivity : AppCompatActivity() {
     /** Background thread. Always ends with finishOne() on the UI thread. */
     private fun runImport(app: Context, uri: Uri) {
         var message: String
+        var addedId: String? = null
         try {
             val id = UUID.randomUUID().toString()
             val fileName = "$id.m4a"
@@ -222,6 +223,7 @@ class MainActivity : AppCompatActivity() {
                         throw e
                     }
                     PlaybackService.reload(app)
+                    addedId = id
                     app.getString(R.string.added)
                 }
                 ExtractResult.NoAudio -> app.getString(R.string.no_audio)
@@ -234,6 +236,8 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             finishOne()
             toast(message)
+            val newId = addedId
+            if (newId != null && !isDestroyed && !isFinishing) chooseFrame(newId, uri, afterImport = true)
         }
     }
 
@@ -382,6 +386,8 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             finishOne()
             toast(message)
+            val newId = addedId
+            if (newId != null && !isDestroyed && !isFinishing) chooseFrame(newId, uri, afterImport = true)
         }
     }
 
@@ -538,38 +544,45 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Scrub through the video and keep the frame shown when 決定 is pressed. */
-    private fun chooseFrame(id: String, uri: Uri) {
+    /**
+     * Scrub through the video (hold the finger still to zoom in) and continue with the frame
+     * shown when 次へ is pressed: then choose the square part (crop) for the jacket.
+     * [afterImport]: asked right after adding a track; スキップ keeps the automatic picture.
+     */
+    private fun chooseFrame(id: String, uri: Uri, afterImport: Boolean = false) {
         val app = applicationContext
+        val density = resources.displayMetrics.density
         val preview = android.widget.ImageView(this).apply {
             adjustViewBounds = true
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             setBackgroundColor(0xFF000000.toInt())
-            minimumHeight = (180 * resources.displayMetrics.density).toInt()
+            minimumHeight = (180 * density).toInt()
         }
-        val label = android.widget.TextView(this).apply { setPadding(0, 12, 0, 0) }
-        val seek = android.widget.SeekBar(this).apply { max = 1000 }
+        val label = android.widget.TextView(this).apply { setPadding(0, (8 * density).toInt(), 0, 0) }
+        val scrubber = FineScrubber(this)
         val col = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            val p = (20 * resources.displayMetrics.density).toInt()
+            val p = (20 * density).toInt()
             setPadding(p, p / 2, p, 0)
             addView(preview)
             addView(label)
-            addView(seek)
+            addView(scrubber)
         }
         var duration = 0L
         var current: android.graphics.Bitmap? = null
-        var wanted = 1_000_000L
+        var wanted = 0L
         var loading = false
+        var closed = false
+        fun time(us: Long) = "%d:%02d.%d".format(us / 60_000_000, us / 1_000_000 % 60, us / 100_000 % 10)
         fun load() {
-            if (loading) return
+            if (loading || closed) return
             loading = true
             val at = wanted
             executor.execute {
                 val f = Thumbnails.frameAt(app, uri, at)
                 runOnUiThread {
                     loading = false
-                    if (isDestroyed) return@runOnUiThread
+                    if (isDestroyed || closed) return@runOnUiThread
                     if (f != null) {
                         current = f
                         preview.setImageBitmap(f)
@@ -578,35 +591,52 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        fun time(us: Long) = "%d:%02d".format(us / 60_000_000, us / 1_000_000 % 60)
-        seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
-                if (!fromUser || duration <= 0) return
-                wanted = duration * p / 1000
-                label.text = "${time(wanted)} / ${time(duration)}"
-                load()
-            }
-            override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
-            override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
-        })
+        scrubber.onChange = { us, _ ->
+            wanted = us
+            label.text = "${time(us)} / ${time(duration)}"
+            load()
+        }
         executor.execute {
             val d = Thumbnails.durationUs(app, uri)
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || closed) return@runOnUiThread
                 duration = d
+                scrubber.durationUs = d
                 wanted = minOf(1_000_000L, d / 2)
-                seek.progress = if (d > 0) (wanted * 1000 / d).toInt() else 0
-                label.text = if (d > 0) "${time(wanted)} / ${time(d)}　スライダーで場面を選んでください" else "動画を読み込めませんでした"
+                scrubber.setPosition(wanted)
+                label.text = if (d > 0) "${time(wanted)} / ${time(d)}" else "動画を読み込めませんでした"
                 load()
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle("ジャケットにする場面")
+        val b = AlertDialog.Builder(this)
+            .setTitle(if (afterImport) "サムネイルにする場面を選んでください" else "ジャケットにする場面")
             .setView(col)
-            .setPositiveButton("決定") { _, _ ->
+            .setPositiveButton("次へ（切り取り）") { _, _ ->
                 val frame = current ?: return@setPositiveButton toast("場面を読み込んでいるところです。もう一度お試しください")
-                saveJacket(id, frame)
+                cropJacket(id, frame)
             }
+            .setNegativeButton(if (afterImport) "スキップ" else getString(R.string.cancel), null)
+            .setOnDismissListener { closed = true }
+        b.show()
+    }
+
+    /** Pick the square part of [picture] that becomes the jacket (and the record label). */
+    private fun cropJacket(id: String, picture: android.graphics.Bitmap) {
+        val view = SquareCropView(this, picture)
+        val hint = android.widget.TextView(this).apply {
+            text = "枠をドラッグで移動、2本指で大きさを変えられます"
+            val p = (20 * resources.displayMetrics.density).toInt()
+            setPadding(p, p / 3, p, p / 3)
+        }
+        val col = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(hint)
+            addView(view)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("切り取る範囲")
+            .setView(col)
+            .setPositiveButton("決定") { _, _ -> saveJacket(id, view.cropped()) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -626,7 +656,7 @@ class MainActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                if (bmp == null) toast("写真を読み込めませんでした") else saveJacket(id, bmp)
+                if (bmp == null) toast("写真を読み込めませんでした") else cropJacket(id, bmp)
             }
         }
     }
