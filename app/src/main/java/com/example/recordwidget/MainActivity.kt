@@ -386,8 +386,6 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             finishOne()
             toast(message)
-            val newId = addedId
-            if (newId != null && !isDestroyed && !isFinishing) chooseFrame(newId, uri, afterImport = true)
         }
     }
 
