@@ -111,7 +111,7 @@ class Cloud(ctx: Context) {
 
     private fun lists(filter: String): List<SharedList> {
         val arr = JSONArray(
-            rest("GET", "/rest/v1/playlists?select=id,title,owner,is_public,like_count,profiles(name),playlist_tracks(count)&$filter"),
+            rest("GET", "/rest/v1/playlists?select=id,title,owner,is_public,like_count,profiles!owner(name),playlist_tracks(count)&$filter"),
         )
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
