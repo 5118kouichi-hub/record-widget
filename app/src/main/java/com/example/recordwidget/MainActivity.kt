@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onNext() = PlaybackService.command(this@MainActivity, PlaybackService.ACTION_NEXT)
                 override fun onRename(t: Track) = trackMenu(t)
                 override fun onChooseSkin() = chooseSkin()
+                override fun onJacketLongPress(onScreen: android.graphics.RectF) = liftJacket(onScreen)
                 override fun onChooseFont() = chooseFont()
                 override fun onDelete(t: Track) = confirmDelete(t)
                 override fun onMove(from: Int, to: Int) = moveTrack(from, to)
@@ -441,6 +442,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- look: player type, font, jackets -------------------------------------------------
+
+    private val jacketFloat by lazy { JacketFloat(this) }
+
+    /** Long-pressed jacket: show it big and floating (sharper picture than the deck's). */
+    private fun liftJacket(onScreen: android.graphics.RectF) {
+        val np = PlaybackService.nowPlaying
+        val track = TrackStore(filesDir).all().let { all -> all.firstOrNull { it.id == np.trackId } ?: PlaybackState.resumeTrack(this, all) }
+        val big = Jackets.make(this, track?.id, track?.title, Skin.current(this), 720)
+        jacketFloat.show(big, onScreen)
+    }
 
     private fun chooseSkin() {
         val skins = Skin.entries

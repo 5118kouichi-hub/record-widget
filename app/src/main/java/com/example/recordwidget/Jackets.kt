@@ -21,10 +21,10 @@ import java.io.File
 object Jackets {
     const val SIZE = 200
 
-    fun make(ctx: Context, trackId: String?, title: String?, skin: Skin): Bitmap {
-        val out = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+    fun make(ctx: Context, trackId: String?, title: String?, skin: Skin, size: Int = SIZE): Bitmap {
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val s = SIZE.toFloat()
+        val s = size.toFloat()
         val rect = RectF(0f, 0f, s, s)
         val radius = s * 0.025f
         val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)

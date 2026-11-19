@@ -38,6 +38,8 @@ class HeroPlayerView(context: Context) : View(context) {
         /** [totalDeg] turned so far (clockwise = forward). Returns the time to show. */
         fun onScratch(totalDeg: Float): String? = null
         fun onScratchEnd(totalDeg: Float, cancelled: Boolean) {}
+        /** Long press on the jacket; [onScreen] = where it is drawn, in screen pixels. */
+        fun onJacketLongPress(onScreen: RectF) {}
     }
 
     var listener: Listener? = null
@@ -241,6 +243,18 @@ class HeroPlayerView(context: Context) : View(context) {
         setShadowLayer(6f, 0f, 2f, 0xCC000000.toInt())
     }
 
+    /** Where the jacket is drawn (view pixels). */
+    private fun jacketRect() = RectF(14 * k, 66 * k, 94 * k, 146 * k)
+
+    private var jacketHeld = false
+    private val jacketLongPress = Runnable {
+        jacketHeld = true
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        val loc = IntArray(2).also { getLocationOnScreen(it) }
+        val r = jacketRect().apply { offset(loc[0].toFloat(), loc[1].toFloat()) }
+        listener?.onJacketLongPress(r)
+    }
+
     private fun recordCx() = discBox.left + 0.44f * discBox.width()
     private fun recordCy() = discBox.top + 0.56f * discBox.height()
     private fun degAt(e: MotionEvent) =
@@ -263,10 +277,13 @@ class HeroPlayerView(context: Context) : View(context) {
                 val dist = hypot(e.x - recordCx(), e.y - recordCy())
                 onRecord = dist < 0.48f * discBox.width() && dist > 0.12f * discBox.width()
                 scratching = false
+                jacketHeld = false
                 if (onRecord) parent?.requestDisallowInterceptTouchEvent(true) // don't scroll the page
+                if (jacket != null && jacketRect().contains(e.x, e.y)) postDelayed(jacketLongPress, 450L)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                if (hypot(e.x - downX, e.y - downY) > 10 * resources.displayMetrics.density) removeCallbacks(jacketLongPress)
                 if (!onRecord) return true
                 if (!scratching) {
                     if (hypot(e.x - downX, e.y - downY) < 10 * resources.displayMetrics.density) return true
@@ -288,10 +305,13 @@ class HeroPlayerView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(jacketLongPress)
                 endScratch(cancelled = true)
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(jacketLongPress)
+                if (jacketHeld) return true
                 if (scratching) {
                     endScratch(cancelled = false)
                     return true

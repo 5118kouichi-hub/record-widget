@@ -369,6 +369,15 @@ class SharedListsUi(
                     addView(screen.text("%02d  %s".format(i + 1, t.title), 15f, s.text).apply { setPadding(0, dp(6), 0, dp(6)) })
                 }
                 if (tracks.isEmpty()) addView(screen.text("曲がありません", 14f, s.sub))
+                if (tracks.isNotEmpty()) {
+                    addView(
+                        screen.text("⤓ 好きな曲を選んでダウンロード", 15f, s.accent).apply {
+                            setPadding(0, dp(14), 0, dp(6))
+                            isClickable = true
+                            setOnClickListener { chooseDownloads(l, tracks) }
+                        },
+                    )
+                }
                 if (mine) {
                     addView(
                         SwitchCompat(activity).apply {
@@ -410,6 +419,50 @@ class SharedListsUi(
                 }
             }
             .show()
+    }
+
+    /** Pick tracks of a shared list and save them on this phone (play offline, no data use). */
+    private fun chooseDownloads(l: Cloud.SharedList, tracks: List<Cloud.SharedTrack>) {
+        val have = TrackStore(activity.filesDir).all().map { it.id }.toSet()
+        val checked = BooleanArray(tracks.size) { DL_PREFIX + tracks[it].id !in have }
+        val names = tracks.map { t -> if (DL_PREFIX + t.id in have) "${t.title}（保存済み）" else t.title }.toTypedArray()
+        AlertDialog.Builder(activity)
+            .setTitle("ダウンロードする曲")
+            .setMultiChoiceItems(names, checked) { _, i, on -> checked[i] = on }
+            .setNegativeButton("やめる", null)
+            .setPositiveButton("ダウンロード") { _, _ ->
+                val chosen = tracks.filterIndexed { i, t -> checked[i] && DL_PREFIX + t.id !in have }
+                if (chosen.isEmpty()) toast("新しく保存する曲がありません") else download(l, chosen)
+            }
+            .show()
+    }
+
+    private fun download(l: Cloud.SharedList, tracks: List<Cloud.SharedTrack>) {
+        toast("${tracks.size}曲をダウンロードしています…")
+        background({
+            val store = TrackStore(activity.filesDir)
+            var done = 0
+            for (t in tracks) {
+                val id = DL_PREFIX + t.id
+                val ext = t.path.substringAfterLast('.', "m4a")
+                val fileName = "$id.$ext"
+                val out = java.io.File(activity.filesDir, "tracks/$fileName")
+                cloud.download(t.path, out)
+                store.add(Track(id, t.title, fileName))
+                // the streamed copy (from 聴く) is no longer needed
+                if (store.all().any { it.id == CLOUD_PREFIX + t.id }) store.remove(CLOUD_PREFIX + t.id)
+                done++
+            }
+            done
+        }, onError = { msg ->
+            onLibraryChanged()
+            PlaybackService.reload(activity)
+            alert("ダウンロードが途中で止まりました", msg)
+        }) { n ->
+            onLibraryChanged()
+            PlaybackService.reload(activity)
+            toast("「${l.title}」から${n}曲を保存しました（音声一覧）")
+        }
     }
 
     /** Adds the list to the 音声一覧 as streamed tracks and starts it if nothing is playing. */
@@ -468,5 +521,6 @@ class SharedListsUi(
 
     companion object {
         const val CLOUD_PREFIX = "cloud-"
+        const val DL_PREFIX = "dl-"
     }
 }

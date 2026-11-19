@@ -204,11 +204,30 @@ class Cloud(ctx: Context) {
     }
 
     /** A playable link to one track, valid for [SIGN_SECONDS]. */
-    fun signedUrl(path: String): String {
-        val o = JSONObject(rest("POST", "/storage/v1/object/sign/audio/$path", JSONObject().put("expiresIn", SIGN_SECONDS)))
+    fun signedUrl(path: String): String = signedUrlFor(path, SIGN_SECONDS)
+
+    private fun signedUrlFor(path: String, seconds: Int): String {
+        val o = JSONObject(rest("POST", "/storage/v1/object/sign/audio/$path", JSONObject().put("expiresIn", seconds)))
         val rel = o.optString("signedURL").ifEmpty { o.optString("signedUrl") }
         if (rel.isEmpty()) throw CloudException("no signed url")
         return if (rel.startsWith("http")) rel else "$BASE/storage/v1$rel"
+    }
+
+    /** Saves one shared track to [out] (through a short-lived signed link). */
+    fun download(path: String, out: File) {
+        val url = signedUrlFor(path, 600)
+        val c = URL(url).openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = 15_000
+            c.readTimeout = 60_000
+            if (c.responseCode !in 200..299) throw CloudException("HTTP ${c.responseCode}", c.responseCode)
+            val tmp = File(out.path + ".part")
+            out.parentFile?.mkdirs()
+            c.inputStream.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            if (!tmp.renameTo(out)) throw IOException("could not save")
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun upload(path: String, file: File) {
