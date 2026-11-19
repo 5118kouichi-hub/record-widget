@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var store: TrackStore
     private lateinit var screen: MainScreen
+    private lateinit var shared: SharedListsUi
 
     private val executor = Executors.newSingleThreadExecutor()
     private var pendingImports = 0 // main thread only
@@ -81,6 +82,10 @@ class MainActivity : AppCompatActivity() {
                 }
             },
         )
+        shared = SharedListsUi(this, screen, UiStyle.current(this)) { refresh() }
+        screen.homeExtra = shared.homeSection
+        screen.tracksExtra = shared.mineSection
+        screen.settingsExtra = shared.nameSection
         screen.install()
         // Back closes the fan menu first.
         onBackPressedDispatcher.addCallback(
@@ -215,6 +220,7 @@ class MainActivity : AppCompatActivity() {
         screen.setFloatingChecked(FloatingRecord.isEnabled(this) && Settings.canDrawOverlays(this))
         PlaybackService.floatingChanged(this)
         refresh() // the order may have changed from the floating record's list
+        shared.refresh()
     }
 
     /** The floating record's list may have reordered tracks while this screen stayed open. */

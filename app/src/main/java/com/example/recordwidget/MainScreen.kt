@@ -78,6 +78,11 @@ class MainScreen(
     private lateinit var updateStatus: TextView
     private var syncing = false
 
+    /** Sections added by the shared lists (set before [install]). */
+    var homeExtra: View? = null
+    var tracksExtra: View? = null
+    var settingsExtra: View? = null
+
     private lateinit var root: FrameLayout
     private lateinit var fan: FanMenu
     private lateinit var addPage: View
@@ -129,6 +134,7 @@ class MainScreen(
         }
         home.addView(heroHint)
         home.addView(volumeBar())
+        homeExtra?.let { home.addView(it) }
         val homeScroll = ScrollView(activity).apply {
             background = WoodDrawable(s.bg, s.bgGrain, density)
             isFillViewport = true
@@ -150,7 +156,10 @@ class MainScreen(
             typeface = s.serifBold
             setPadding(dp(s.groupMarginDp + 6), 0, 0, dp(10))
         }
-        tracksPage = page(R.string.page_tracks, tracksCount, tracksGroup, footer(R.string.hint_widget))
+        tracksPage = page(
+            R.string.page_tracks,
+            *listOfNotNull(tracksCount, tracksGroup, footer(R.string.hint_widget), tracksExtra).toTypedArray(),
+        )
 
         floatingSwitch = switch { on -> if (!syncing) callbacks.onFloatingSwitch(on) }
         val updateSwitch = switch { on -> callbacks.onAutoUpdate(on) }
@@ -166,7 +175,7 @@ class MainScreen(
                 switchRow(R.drawable.ic_update, R.string.update_auto, updateSwitch),
                 actionRow(R.drawable.ic_update, R.string.update_check_now) { callbacks.onCheckUpdate() },
             ),
-            updateStatus,
+            *listOfNotNull(updateStatus, settingsExtra).toTypedArray(),
         )
 
         // ---- FAB fan in the top-right corner, above everything ----
@@ -362,7 +371,7 @@ class MainScreen(
     }
 
     /** Section caption: a small red record-label dot and serif mustard text. */
-    private fun caption(res: Int): View = LinearLayout(activity).apply {
+    internal fun caption(res: Int): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(s.groupMarginDp + 4), dp(26), dp(20), dp(8))
@@ -384,13 +393,13 @@ class MainScreen(
         )
     }
 
-    private fun footer(res: Int): TextView = onBgText(if (res == 0) "" else activity.getString(res), 12.5f, s.onBgSub).apply {
+    internal fun footer(res: Int): TextView = onBgText(if (res == 0) "" else activity.getString(res), 12.5f, s.onBgSub).apply {
         setPadding(dp(s.groupMarginDp + 6), dp(8), dp(s.groupMarginDp + 6), 0)
         setLineSpacing(0f, 1.15f)
     }
 
     /** A cream paper sleeve with a soft shadow. */
-    private fun card(vararg rows: View): LinearLayout = LinearLayout(activity).apply {
+    internal fun card(vararg rows: View): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(s.card, 0xFFEBDDBF.toInt())).apply {
             cornerRadius = dpf(s.cardRadiusDp)
@@ -408,7 +417,7 @@ class MainScreen(
         }
     }
 
-    private fun separator(): View = View(activity).apply {
+    internal fun separator(): View = View(activity).apply {
         setBackgroundColor(s.separator)
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
             leftMargin = dp(18)
@@ -416,20 +425,20 @@ class MainScreen(
         }
     }
 
-    private fun pressable(v: View) {
+    internal fun pressable(v: View) {
         v.background = RippleDrawable(ColorStateList.valueOf(s.pressed), null, ColorDrawable(0xFFFFFFFF.toInt()))
         v.isClickable = true
         v.isFocusable = true
     }
 
-    private fun rowBase(): LinearLayout = LinearLayout(activity).apply {
+    internal fun rowBase(): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = dp(s.rowHeightDp)
         setPadding(dp(18), dp(4), dp(12), dp(4))
     }
 
-    private fun icon(res: Int, tint: Int): ImageView = ImageView(activity).apply {
+    internal fun icon(res: Int, tint: Int): ImageView = ImageView(activity).apply {
         setImageResource(res)
         imageTintList = ColorStateList.valueOf(tint)
         layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(14) }
@@ -511,13 +520,13 @@ class MainScreen(
             setOnClickListener { onClick() }
         }
 
-    private fun text(value: String, sizeSp: Float, color: Int): TextView = TextView(activity).apply {
+    internal fun text(value: String, sizeSp: Float, color: Int): TextView = TextView(activity).apply {
         text = value
         textSize = sizeSp
         setTextColor(color)
     }
 
-    private fun onBgText(value: String, sizeSp: Float, color: Int): TextView = text(value, sizeSp, color).apply {
+    internal fun onBgText(value: String, sizeSp: Float, color: Int): TextView = text(value, sizeSp, color).apply {
         setShadowLayer(4f, 0f, 1f, 0x99000000.toInt())
     }
 

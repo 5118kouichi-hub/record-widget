@@ -40,6 +40,16 @@ class TrackStore(private val root: File) {
         }
     }
 
+    /** Adds a streamed track, or gives an existing one with this id its new [url] and [title]. */
+    fun putRemote(id: String, title: String, url: String) {
+        synchronized(LOCK) {
+            val list = load()
+            val i = list.indexOfFirst { it.id == id }
+            if (i >= 0) list[i] = list[i].copy(title = title, url = url) else list.add(Track(id, title, "", url))
+            save(list)
+        }
+    }
+
     fun rename(id: String, title: String) {
         synchronized(LOCK) {
             val list = load()

@@ -107,4 +107,8 @@
     <string name="page_settings">設定</string>
     <string name="add_footer">ギャラリーの動画や画面録画から音声だけを取り出します。他のアプリから「共有」で送ることもできます。</string>
     <string name="cd_back">戻る</string>
+    <string name="shared_public">みんなのリスト</string>
+    <string name="shared_mine">マイリスト（みんなと共有）</string>
+    <string name="shared_mine_footer">自分のライブ音声などをまとめて、公開か非公開を選んでアップロードできます。公開したリストはみんなのホームに並びます。</string>
+    <string name="shared_name_caption">ニックネーム</string>
 </resources>
