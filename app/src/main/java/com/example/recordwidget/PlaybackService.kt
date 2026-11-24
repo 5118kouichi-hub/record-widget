@@ -158,6 +158,7 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         isRunning = true
         live = this
+        registerReceiver(screenOff, android.content.IntentFilter(Intent.ACTION_SCREEN_OFF))
 
         // Same id/channel as the placeholder notification below, so Media3 replaces it in place.
         val provider = DefaultMediaNotificationProvider.Builder(this)
@@ -377,7 +378,18 @@ class PlaybackService : MediaSessionService() {
         if (!player.playWhenReady || player.mediaItemCount == 0) stopSelf()
     }
 
+    /** Setting "画面を消したら止める": pause when the screen turns off. */
+    private val screenOff = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (PlaybackState.pauseOnScreenOff(context) && player.isPlaying) player.pause()
+        }
+    }
+
     override fun onDestroy() {
+        try {
+            unregisterReceiver(screenOff)
+        } catch (e: IllegalArgumentException) {
+        }
         isRunning = false
         if (live === this) live = null
         isPlaying = false

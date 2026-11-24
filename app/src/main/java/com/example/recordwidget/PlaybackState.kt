@@ -48,6 +48,14 @@ object PlaybackState {
         ctx.getSharedPreferences(FAV_PREFS, Context.MODE_PRIVATE).edit().putStringSet(KEY_FAV_IDS, set).apply()
     }
 
+    /** Setting: pause when the screen goes off (default off: keep playing). */
+    fun pauseOnScreenOff(ctx: Context): Boolean =
+        ctx.getSharedPreferences(FAV_PREFS, Context.MODE_PRIVATE).getBoolean("pause_screen_off", false)
+
+    fun setPauseOnScreenOff(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(FAV_PREFS, Context.MODE_PRIVATE).edit().putBoolean("pause_screen_off", on).apply()
+    }
+
     /** "Play favorites only" switch (in the floating record's list). */
     fun favoritesOnly(ctx: Context): Boolean =
         ctx.getSharedPreferences(FAV_PREFS, Context.MODE_PRIVATE).getBoolean(KEY_FAV_ONLY, false)

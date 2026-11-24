@@ -117,4 +117,7 @@
     <string name="look_footer">プレーヤーの種類はウィジェットにも反映されます。フォントはアプリの画面だけ（ウィジェットの文字は Android の仕組み上変えられません）。曲のジャケットは音声一覧で曲名をタップして変えられます。</string>
     <string name="cd_seek_back">10秒戻す</string>
     <string name="cd_seek_fwd">10秒進める</string>
+    <string name="section_playback">再生</string>
+    <string name="pause_screen_off">画面を消したら止める</string>
+    <string name="pause_screen_off_hint">オンにすると、電源ボタンで画面を消したときに音楽が一時停止します。オフなら画面を消しても流れ続けます。</string>
 </resources>

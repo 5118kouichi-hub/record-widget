@@ -213,8 +213,13 @@ class MainScreen(
         val updateSwitch = switch { on -> callbacks.onAutoUpdate(on) }
         updateSwitch.isChecked = callbacks.autoUpdateOn()
         updateStatus = footer(0)
+        val screenOffSwitch = switch { on -> PlaybackState.setPauseOnScreenOff(activity, on) }
+        screenOffSwitch.isChecked = PlaybackState.pauseOnScreenOff(activity)
         settingsPage = page(
             R.string.page_settings,
+            caption(R.string.section_playback),
+            card(switchRow(R.drawable.ic_note, R.string.pause_screen_off, screenOffSwitch)),
+            footer(R.string.pause_screen_off_hint),
             caption(R.string.section_look),
             card(
                 actionRow(R.drawable.ic_settings, R.string.look_skin) { callbacks.onChooseSkin() },
